@@ -2,53 +2,566 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <meta name="theme-color" content="#060A12" />
-<title>Spinal.io — Posture Detection System</title>
+<title>Posture.OS — Real-Time Posture Detection</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<!-- MediaPipe Pose: client-side webcam overlay only, no video leaves the browser -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 <style>
-  :root{ --bg:#060a12; --panel:#0c1220; --panel-line:#1b2536; --text:#e7eef5; --dim:#6b7a8d; --good:#4ce0d2; }
+  :root{
+    --bg:#060a12; --panel:#0c1220; --panel-line:#1b2536;
+    --text:#e7eef5; --dim:#6b7a8d;
+    --good:#4ce0d2; --warn:#ffb020; --alert:#ff5c6c; --unknown:#4a5568;
+  }
   *{box-sizing:border-box; margin:0; padding:0;}
-  body{
-    background:var(--bg); color:var(--text); font-family:'Space Grotesk',sans-serif;
-    min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;
+  html,body{ background:var(--bg); color:var(--text); font-family:'Space Grotesk',sans-serif; height:100%; overflow:hidden; }
+  .mono{ font-family:'IBM Plex Mono', monospace; }
+
+  /* ============ LOADING SCREEN ============ */
+  #loading-screen{
+    position:fixed; inset:0; z-index:999; background:var(--bg);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    transition:opacity .6s ease, visibility .6s;
   }
-  .wrap{ max-width:640px; width:100%; text-align:center; }
-  .brand{ font-weight:700; font-size:16px; letter-spacing:0.08em; margin-bottom:8px; display:flex; align-items:center; justify-content:center; gap:8px; }
+  #loading-screen.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .load-brand{ font-weight:700; font-size:20px; letter-spacing:0.1em; display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .load-brand .dot{ width:9px; height:9px; border-radius:50%; background:var(--good); box-shadow:0 0 12px var(--good); animation:pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{ opacity:1; transform:scale(1);} 50%{ opacity:.5; transform:scale(0.8);} }
+  .load-sub{ color:var(--dim); font-size:12px; letter-spacing:0.05em; margin-bottom:44px; }
+  .load-bar-wrap{ width:280px; height:2px; background:var(--panel-line); border-radius:2px; overflow:hidden; margin-bottom:16px; }
+  .load-bar{ height:100%; width:0%; background:linear-gradient(90deg, var(--good), #7cf0e4); transition:width .25s ease; }
+  .load-log{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--dim); height:16px; letter-spacing:0.02em; }
+  .load-pct{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--good); margin-top:10px; }
+
+  /* ============ MAIN APP ============ */
+  #app{ opacity:0; transition:opacity .6s ease; }
+  #app.revealed{ opacity:1; }
+
+  #canvas-wrap{ position:fixed; inset:0; }
+  canvas.three-canvas{ display:block; }
+
+  .topbar{
+    position:fixed; top:0; left:0; right:0; display:flex; align-items:center; justify-content:space-between;
+    padding:16px 22px; z-index:10; background:linear-gradient(180deg, rgba(6,10,18,0.9), transparent);
+    pointer-events:none;
+  }
+  .brand{ font-weight:700; font-size:15px; letter-spacing:0.06em; display:flex; align-items:center; gap:8px; }
   .brand .dot{ width:7px; height:7px; border-radius:50%; background:var(--good); box-shadow:0 0 8px var(--good); }
-  h1{ font-size:clamp(24px,4vw,34px); font-weight:600; margin:14px 0 8px; }
-  p.sub{ color:var(--dim); font-size:14px; margin-bottom:36px; }
-  .cards{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-  @media (max-width:520px){ .cards{ grid-template-columns:1fr; } }
-  a.card{
-    display:block; text-decoration:none; color:var(--text);
-    background:var(--panel); border:1px solid var(--panel-line); border-radius:14px;
-    padding:26px 20px; transition:border-color .15s, transform .15s;
+  .conn-status{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:0.05em; color:var(--dim);
+    border:1px solid var(--panel-line); border-radius:20px; padding:6px 12px; pointer-events:auto;
   }
-  a.card:hover{ border-color:var(--good); transform:translateY(-2px); }
-  a.card .eyebrow{ font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:0.1em; color:var(--good); text-transform:uppercase; margin-bottom:10px; display:block; }
-  a.card .title{ font-size:16px; font-weight:600; margin-bottom:6px; }
-  a.card .desc{ font-size:12.5px; color:var(--dim); line-height:1.5; }
+  .conn-status.live{ color:var(--good); border-color:rgba(76,224,210,0.35); }
+  .conn-status .dot{ display:inline-block; width:6px; height:6px; border-radius:50%; background:currentColor; margin-right:6px; }
+
+  .panel{
+    background:rgba(12,18,32,0.78); border:1px solid var(--panel-line); border-radius:14px;
+    backdrop-filter:blur(10px); padding:16px 18px;
+  }
+  .panel h2{ font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--dim); margin-bottom:12px; }
+
+  /* Left column: state + telemetry */
+  #left-col{ position:fixed; top:70px; left:22px; z-index:10; width:230px; display:flex; flex-direction:column; gap:14px; }
+  #state-value{ font-size:21px; font-weight:600; margin-bottom:4px; transition:color .3s; }
+  #state-sub{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--dim); }
+  #sustain-bar-wrap{ margin-top:12px; height:3px; background:var(--panel-line); border-radius:2px; overflow:hidden; }
+  #sustain-bar{ height:100%; width:0%; background:var(--warn); transition:width .3s, background .3s; }
+  .tele-row{ display:flex; justify-content:space-between; align-items:baseline; padding:6px 0; border-bottom:1px solid var(--panel-line); }
+  .tele-row:last-child{ border-bottom:none; }
+  .tele-key{ font-size:11px; color:var(--dim); }
+  .tele-val{ font-family:'IBM Plex Mono',monospace; font-size:13px; font-weight:600; }
+
+  /* Right column: camera + thresholds, scrollable on small screens */
+  #right-col{
+    position:fixed; top:70px; right:22px; bottom:22px; z-index:10; width:300px;
+    display:flex; flex-direction:column; gap:14px; overflow-y:auto;
+  }
+  #right-col::-webkit-scrollbar{ width:4px; }
+  #right-col::-webkit-scrollbar-thumb{ background:var(--panel-line); border-radius:4px; }
+
+  #video-wrap{ position:relative; border-radius:10px; overflow:hidden; background:#000; aspect-ratio:4/3; }
+  video, canvas.overlay{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  #cam-status{
+    position:absolute; top:8px; left:8px; z-index:5; font-family:'IBM Plex Mono',monospace; font-size:9px;
+    padding:4px 9px; border-radius:20px; background:rgba(6,10,18,0.7); border:1px solid var(--panel-line); color:var(--dim);
+  }
+  #cam-status.live{ color:var(--good); border-color:rgba(76,224,210,0.35); }
+  #start-cam-btn{ margin-top:10px; width:100%; padding:10px; border:none; border-radius:9px; background:var(--good); color:#04141a; font-weight:600; cursor:pointer; font-size:12px; }
+  #posture-hint{ margin-top:10px; padding:9px 11px; border-radius:9px; background:#0a0f1c; border:1px solid var(--panel-line); font-size:11.5px; color:var(--dim); line-height:1.4; }
+
+  .control-row{ margin-bottom:14px; }
+  .control-row label{ display:flex; justify-content:space-between; font-size:11px; color:var(--dim); margin-bottom:6px; }
+  .control-row label span.val{ color:var(--text); font-family:'IBM Plex Mono',monospace; }
+  input[type=range]{ width:100%; accent-color:var(--good); }
+
+  .btn-row{ display:flex; gap:8px; margin-bottom:14px; }
+  button.action{
+    flex:1; padding:10px 8px; border-radius:9px; border:1px solid var(--panel-line); background:#0a0f1c;
+    color:var(--text); font-family:'Space Grotesk',sans-serif; font-size:11.5px; cursor:pointer; transition:border-color .15s;
+  }
+  button.action:hover{ border-color:var(--good); }
+  button.action.primary{ background:var(--good); color:#04141a; border:none; font-weight:600; }
+  button.action.small{ width:100%; }
+
+  #legend-panel{ position:fixed; bottom:22px; left:22px; z-index:10; display:flex; gap:14px; padding:10px 16px; }
+  .legend-item{ display:flex; align-items:center; gap:6px; font-size:11px; color:var(--dim); }
+  .legend-swatch{ width:8px; height:8px; border-radius:50%; }
+
+  #toast{
+    position:fixed; top:70px; left:50%; transform:translateX(-50%) translateY(-10px); z-index:20;
+    background:var(--panel); border:1px solid var(--panel-line); border-radius:10px; padding:10px 16px;
+    font-size:12px; opacity:0; pointer-events:none; transition:opacity .3s, transform .3s;
+  }
+  #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  @media (max-width:900px){
+    #left-col{ width:170px; }
+    #right-col{ width:190px; top:auto; bottom:22px; right:22px; max-height:60vh; }
+    #legend-panel{ display:none; }
+    .panel{ padding:12px 14px; }
+    #state-value{ font-size:16px; }
+  }
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="brand"><span class="dot"></span>SPINAL.IO</div>
-    <h1>Real-Time Posture Detection &amp; Correction</h1>
-    <p class="sub">Raspberry Pi + MPU6050 → live posture classification</p>
-    <div class="cards">
-      <a class="card" href="/simulation/">
-        <span class="eyebrow">3D View</span>
-        <div class="title">Simulation</div>
-        <div class="desc">Live bending spine model driven by real sensor data.</div>
-      </a>
-      <a class="card" href="/control/">
-        <span class="eyebrow">Live Feed</span>
-        <div class="title">Control</div>
-        <div class="desc">Camera overlay, calibration, and sensitivity controls.</div>
-      </a>
+
+<!-- ============ LOADING SCREEN ============ -->
+<div id="loading-screen">
+  <div class="load-brand"><span class="dot"></span>POSTURE.OS</div>
+  <div class="load-sub mono">REAL-TIME POSTURE DETECTION &amp; CORRECTION</div>
+  <div class="load-bar-wrap"><div class="load-bar" id="load-bar"></div></div>
+  <div class="load-log mono" id="load-log">Booting system…</div>
+  <div class="load-pct" id="load-pct">0%</div>
+</div>
+
+<!-- ============ MAIN APP ============ -->
+<div id="app">
+  <div id="canvas-wrap"></div>
+
+  <div class="topbar">
+    <div class="brand"><span class="dot"></span>POSTURE.OS</div>
+    <div class="conn-status mono" id="conn-status"><span class="dot"></span>CONNECTING</div>
+  </div>
+
+  <div id="left-col">
+    <div class="panel" id="state-panel">
+      <h2>Posture State</h2>
+      <div id="state-value">—</div>
+      <div id="state-sub" class="mono">awaiting calibration</div>
+      <div id="sustain-bar-wrap"><div id="sustain-bar"></div></div>
+    </div>
+
+    <div class="panel" id="telemetry-panel">
+      <h2>Telemetry</h2>
+      <div class="tele-row"><span class="tele-key">PITCH</span><span class="tele-val mono" id="tv-pitch">0.0°</span></div>
+      <div class="tele-row"><span class="tele-key">ROLL</span><span class="tele-val mono" id="tv-roll">0.0°</span></div>
+      <div class="tele-row"><span class="tele-key">PITCH Δ</span><span class="tele-val mono" id="tv-pdev">0.0°</span></div>
+      <div class="tele-row"><span class="tele-key">ROLL Δ</span><span class="tele-val mono" id="tv-rdev">0.0°</span></div>
+      <div class="tele-row"><span class="tele-key">SUSTAINED</span><span class="tele-val mono" id="tv-sustain">0s</span></div>
     </div>
   </div>
+
+  <div id="right-col">
+    <div class="panel">
+      <h2>Live Camera</h2>
+      <div id="video-wrap">
+        <span id="cam-status" class="mono">CAMERA OFF</span>
+        <video id="video" playsinline style="display:none;"></video>
+        <canvas id="overlay" class="overlay"></canvas>
+      </div>
+      <button id="start-cam-btn">Start Camera</button>
+      <div id="posture-hint">Runs entirely in your browser — no video leaves this page.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Sensor Controls</h2>
+      <div class="btn-row">
+        <button class="action primary" id="btn-calibrate">Calibrate</button>
+        <button class="action" id="btn-buzzer">Test Buzzer</button>
+      </div>
+
+      <div class="control-row">
+        <label>Forward head <span class="val" id="val-fh">12°</span></label>
+        <input type="range" id="slider-fh" min="4" max="30" value="12" />
+      </div>
+      <div class="control-row">
+        <label>Kyphosis <span class="val" id="val-kyp">20°</span></label>
+        <input type="range" id="slider-kyp" min="10" max="40" value="20" />
+      </div>
+      <div class="control-row">
+        <label>Lateral lean <span class="val" id="val-lat">10°</span></label>
+        <input type="range" id="slider-lat" min="4" max="25" value="10" />
+      </div>
+      <div class="control-row">
+        <label>Alert after <span class="val" id="val-sus">15s</span></label>
+        <input type="range" id="slider-sus" min="5" max="60" value="15" />
+      </div>
+      <button class="action small" id="btn-apply">Apply Thresholds</button>
+    </div>
+  </div>
+
+  <div class="panel" id="legend-panel">
+    <div class="legend-item"><span class="legend-swatch" style="background:var(--good)"></span>Good</div>
+    <div class="legend-item"><span class="legend-swatch" style="background:var(--warn)"></span>Forward Head / Swayback</div>
+    <div class="legend-item"><span class="legend-swatch" style="background:var(--alert)"></span>Kyphosis / Lean</div>
+  </div>
+
+  <div id="toast" class="mono"></div>
+</div>
+
+<script>
+/* ======================= CONFIG ======================= */
+const BACKEND_URL = "https://YOUR-RENDER-SERVICE.onrender.com"; // set this to your deployed Render backend
+const POLL_MS = 1000;
+
+/* ======================= LOADING SEQUENCE ======================= */
+const loadBar = document.getElementById('load-bar');
+const loadLog = document.getElementById('load-log');
+const loadPct = document.getElementById('load-pct');
+const loadingScreen = document.getElementById('loading-screen');
+const appEl = document.getElementById('app');
+
+const bootSteps = [
+  { pct: 15, msg: 'Booting system…' },
+  { pct: 35, msg: 'Loading render engine…' },
+  { pct: 55, msg: 'Initializing sensor bridge…' },
+  { pct: 75, msg: 'Connecting to backend…' },
+  { pct: 92, msg: 'Calibrating interface…' },
+  { pct: 100, msg: 'Ready.' },
+];
+let bootIndex = 0;
+function runBootStep(){
+  if(bootIndex >= bootSteps.length){
+    setTimeout(()=>{
+      loadingScreen.classList.add('hidden');
+      appEl.classList.add('revealed');
+    }, 250);
+    return;
+  }
+  const step = bootSteps[bootIndex];
+  loadBar.style.width = step.pct + '%';
+  loadPct.textContent = step.pct + '%';
+  loadLog.textContent = step.msg;
+  bootIndex++;
+  setTimeout(runBootStep, 380);
+}
+runBootStep();
+
+/* ======================= THREE.JS SCENE ======================= */
+const wrap = document.getElementById('canvas-wrap');
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x060a12, 0.045);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 100);
+camera.position.set(6, 3, 9);
+camera.lookAt(0, 2, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.domElement.classList.add('three-canvas');
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+wrap.appendChild(renderer.domElement);
+
+const grid = new THREE.GridHelper(40, 40, 0x1b2536, 0x11182a);
+grid.position.y = -0.01;
+scene.add(grid);
+
+const ambient = new THREE.AmbientLight(0x8899bb, 0.6);
+scene.add(ambient);
+const key = new THREE.PointLight(0x4ce0d2, 1.4, 30);
+key.position.set(4, 8, 6);
+scene.add(key);
+const rim = new THREE.PointLight(0xff5c6c, 0.5, 30);
+rim.position.set(-6, 4, -4);
+scene.add(rim);
+
+const SEGMENTS = 14;
+const SEGMENT_HEIGHT = 0.34;
+const spineGroup = new THREE.Group();
+scene.add(spineGroup);
+
+const vertebraGeo = new THREE.SphereGeometry(0.16, 20, 20);
+const linkGeo = new THREE.CylinderGeometry(0.045, 0.045, SEGMENT_HEIGHT, 10);
+
+const colorFor = (state) => {
+  switch(state){
+    case 'good': return 0x4ce0d2;
+    case 'forward_head': return 0xffb020;
+    case 'swayback': return 0xffb020;
+    case 'lateral_lean': return 0xffb020;
+    case 'kyphosis': return 0xff5c6c;
+    default: return 0x4a5568;
+  }
+};
+
+const bones = [];
+let prevPivot = new THREE.Object3D();
+prevPivot.position.set(0, 0, 0);
+spineGroup.add(prevPivot);
+
+for(let i=0;i<SEGMENTS;i++){
+  const pivot = new THREE.Object3D();
+  pivot.position.set(0, SEGMENT_HEIGHT, 0);
+  prevPivot.add(pivot);
+
+  const link = new THREE.Mesh(linkGeo, new THREE.MeshStandardMaterial({
+    color: 0x4a5568, emissive: 0x0d3b38, emissiveIntensity: 0.4, roughness: 0.35, metalness: 0.4
+  }));
+  link.position.set(0, SEGMENT_HEIGHT/2, 0);
+  pivot.add(link);
+
+  const vert = new THREE.Mesh(vertebraGeo, new THREE.MeshStandardMaterial({
+    color: 0x4a5568, emissive: 0x0d3b38, emissiveIntensity: 0.6, roughness: 0.2, metalness: 0.5
+  }));
+  vert.position.set(0, SEGMENT_HEIGHT, 0);
+  pivot.add(vert);
+
+  bones.push({ pivot, link, vert });
+  prevPivot = pivot;
+}
+
+const base = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.6, 0.7, 0.15, 24),
+  new THREE.MeshStandardMaterial({ color: 0x0c1220, emissive: 0x111a2c, roughness: 0.6 })
+);
+base.position.y = -0.08;
+spineGroup.add(base);
+
+function updateSpineColor(state){
+  const c = colorFor(state);
+  bones.forEach(b=>{
+    b.link.material.color.setHex(c); b.link.material.emissive.setHex(c);
+    b.vert.material.color.setHex(c); b.vert.material.emissive.setHex(c);
+  });
+}
+
+let displayPitch = 0, displayRoll = 0, targetPitch = 0, targetRoll = 0;
+function applyBend(pitchDeg, rollDeg){
+  const pitchRad = THREE.MathUtils.degToRad(pitchDeg);
+  const rollRad = THREE.MathUtils.degToRad(rollDeg);
+  bones.forEach((b, i)=>{
+    const weight = (i+1) / SEGMENTS;
+    b.pivot.rotation.x = pitchRad * weight * 0.9;
+    b.pivot.rotation.z = rollRad * weight * 0.9;
+  });
+}
+
+window.addEventListener('resize', ()=>{
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+function animate(){
+  requestAnimationFrame(animate);
+  displayPitch += (targetPitch - displayPitch) * 0.08;
+  displayRoll += (targetRoll - displayRoll) * 0.08;
+  applyBend(displayPitch, displayRoll);
+  spineGroup.rotation.y += 0.0015;
+  renderer.render(scene, camera);
+}
+animate();
+
+/* ======================= DATA LAYER ======================= */
+const el = {
+  conn: document.getElementById('conn-status'),
+  stateVal: document.getElementById('state-value'),
+  stateSub: document.getElementById('state-sub'),
+  sustainBar: document.getElementById('sustain-bar'),
+  pitch: document.getElementById('tv-pitch'),
+  roll: document.getElementById('tv-roll'),
+  pdev: document.getElementById('tv-pdev'),
+  rdev: document.getElementById('tv-rdev'),
+  sustain: document.getElementById('tv-sustain'),
+  toast: document.getElementById('toast'),
+};
+
+const STATE_LABELS = {
+  good: 'Good Posture', forward_head: 'Forward Head', kyphosis: 'Kyphosis (Rounded Back)',
+  swayback: 'Swayback', lateral_lean: 'Lateral Lean', uncalibrated: 'Not Calibrated', unknown: 'No Data',
+};
+
+function setConn(live){
+  el.conn.classList.toggle('live', live);
+  el.conn.innerHTML = `<span class="dot"></span>${live ? 'LIVE' : 'CONNECTING'}`;
+}
+function showToast(msg){
+  el.toast.textContent = msg;
+  el.toast.classList.add('show');
+  setTimeout(()=>el.toast.classList.remove('show'), 2200);
+}
+
+function handleReading(r){
+  targetPitch = r.pitch || 0;
+  targetRoll = r.roll || 0;
+  updateSpineColor(r.state);
+  el.stateVal.textContent = STATE_LABELS[r.state] || r.state;
+  el.stateVal.style.color = '#' + colorFor(r.state).toString(16).padStart(6,'0');
+  el.stateSub.textContent = r.alert ? '⚠ sustained deviation — consider adjusting' : 'within normal tracking';
+  const pct = Math.min(100, (r.sustained_seconds || 0) / 15 * 100);
+  el.sustainBar.style.width = pct + '%';
+  el.sustainBar.style.background = r.alert ? 'var(--alert)' : 'var(--warn)';
+  el.pitch.textContent = (r.pitch ?? 0).toFixed(1) + '°';
+  el.roll.textContent = (r.roll ?? 0).toFixed(1) + '°';
+  el.pdev.textContent = (r.pitch_dev ?? 0).toFixed(1) + '°';
+  el.rdev.textContent = (r.roll_dev ?? 0).toFixed(1) + '°';
+  el.sustain.textContent = Math.round(r.sustained_seconds || 0) + 's';
+}
+
+let usingSocket = false;
+try{
+  const socket = io(BACKEND_URL, { transports: ['websocket','polling'], reconnectionAttempts: 5 });
+  socket.on('connect', ()=>{ usingSocket = true; setConn(true); });
+  socket.on('disconnect', ()=>{ usingSocket = false; setConn(false); });
+  socket.on('posture_update', handleReading);
+}catch(e){ console.warn('socket unavailable, falling back to polling', e); }
+
+async function pollLatest(){
+  if(usingSocket) return;
+  try{
+    const res = await fetch(`${BACKEND_URL}/api/latest`);
+    if(res.ok){ setConn(true); handleReading(await res.json()); } else setConn(false);
+  }catch(e){ setConn(false); }
+}
+setInterval(pollLatest, POLL_MS);
+pollLatest();
+
+document.getElementById('btn-calibrate').addEventListener('click', async ()=>{
+  try{
+    const res = await fetch(`${BACKEND_URL}/api/calibrate`, { method:'POST' });
+    if(res.ok) showToast('Calibrated — current pose set as neutral');
+    else showToast((await res.json()).error || 'Calibration failed');
+  }catch(e){ showToast('Could not reach backend'); }
+});
+
+document.getElementById('btn-buzzer').addEventListener('click', async ()=>{
+  try{
+    await fetch(`${BACKEND_URL}/api/commands`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type:'buzzer_test' })
+    });
+    showToast('Buzzer test queued for device');
+  }catch(e){ showToast('Could not queue command'); }
+});
+
+const sliders = {
+  fh: document.getElementById('slider-fh'), kyp: document.getElementById('slider-kyp'),
+  lat: document.getElementById('slider-lat'), sus: document.getElementById('slider-sus'),
+};
+const vals = {
+  fh: document.getElementById('val-fh'), kyp: document.getElementById('val-kyp'),
+  lat: document.getElementById('val-lat'), sus: document.getElementById('val-sus'),
+};
+Object.keys(sliders).forEach(k=>{
+  sliders[k].addEventListener('input', ()=> vals[k].textContent = sliders[k].value + (k==='sus' ? 's' : '°'));
+});
+
+document.getElementById('btn-apply').addEventListener('click', async ()=>{
+  try{
+    await fetch(`${BACKEND_URL}/api/config`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        forward_head_threshold: Number(sliders.fh.value),
+        kyphosis_threshold: Number(sliders.kyp.value),
+        lateral_threshold: Number(sliders.lat.value),
+        sustained_alert_seconds: Number(sliders.sus.value),
+      })
+    });
+    showToast('Thresholds updated');
+  }catch(e){ showToast('Could not update thresholds'); }
+});
+
+(async ()=>{
+  try{
+    const res = await fetch(`${BACKEND_URL}/api/config`);
+    if(res.ok){
+      const c = await res.json();
+      sliders.fh.value = c.forward_head_threshold; vals.fh.textContent = c.forward_head_threshold + '°';
+      sliders.kyp.value = c.kyphosis_threshold; vals.kyp.textContent = c.kyphosis_threshold + '°';
+      sliders.lat.value = c.lateral_threshold; vals.lat.textContent = c.lateral_threshold + '°';
+      sliders.sus.value = c.sustained_alert_seconds; vals.sus.textContent = c.sustained_alert_seconds + 's';
+    }
+  }catch(e){ /* backend not reachable yet, keep defaults */ }
+})();
+
+/* ======================= CAMERA + MEDIAPIPE POSE ======================= */
+const camEl = {
+  video: document.getElementById('video'), overlay: document.getElementById('overlay'),
+  camStatus: document.getElementById('cam-status'), startCamBtn: document.getElementById('start-cam-btn'),
+  hint: document.getElementById('posture-hint'),
+};
+let camActive = false;
+const ctx = camEl.overlay.getContext('2d');
+
+async function startCamera(){
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    camEl.video.srcObject = stream;
+    await camEl.video.play();
+    camActive = true;
+    camEl.camStatus.textContent = 'LIVE';
+    camEl.camStatus.classList.add('live');
+    camEl.startCamBtn.textContent = 'Stop Camera';
+    resizeOverlay();
+    runPose();
+  }catch(e){
+    showToast('Camera permission denied or unavailable');
+  }
+}
+function stopCamera(){
+  const stream = camEl.video.srcObject;
+  if(stream) stream.getTracks().forEach(t=>t.stop());
+  camActive = false;
+  camEl.camStatus.textContent = 'CAMERA OFF';
+  camEl.camStatus.classList.remove('live');
+  camEl.startCamBtn.textContent = 'Start Camera';
+  ctx.clearRect(0,0,camEl.overlay.width, camEl.overlay.height);
+}
+camEl.startCamBtn.addEventListener('click', ()=> camActive ? stopCamera() : startCamera());
+
+function resizeOverlay(){
+  camEl.overlay.width = camEl.video.clientWidth;
+  camEl.overlay.height = camEl.video.clientHeight;
+}
+window.addEventListener('resize', resizeOverlay);
+
+let pose;
+function initPose(){
+  pose = new Pose({ locateFile: (f)=>`https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
+  pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+  pose.onResults(onPoseResults);
+}
+function onPoseResults(results){
+  ctx.save();
+  ctx.clearRect(0,0,camEl.overlay.width, camEl.overlay.height);
+  if(results.poseLandmarks){
+    drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#4ce0d2', lineWidth: 2 });
+    drawLandmarks(ctx, results.poseLandmarks, { color: '#ffb020', radius: 2 });
+    const lm = results.poseLandmarks;
+    const ear = lm[7], shoulder = lm[11];
+    if(ear && shoulder){
+      const forwardOffset = Math.abs(ear.x - shoulder.x);
+      camEl.hint.textContent = forwardOffset > 0.09
+        ? 'Camera cue: head appears forward of shoulders.'
+        : 'Camera cue: head roughly aligned over shoulders.';
+    }
+  }
+  ctx.restore();
+}
+async function runPose(){
+  if(!pose) initPose();
+  const loop = async ()=>{
+    if(!camActive) return;
+    await pose.send({ image: camEl.video });
+    requestAnimationFrame(loop);
+  };
+  loop();
+}
+</script>
 </body>
 </html>
