@@ -92,7 +92,10 @@
   #viz-top{ position:relative; z-index:2; display:flex; justify-content:space-between; align-items:center; padding:16px 20px 0; }
   #viz-top h2{ margin:0; }
   #figure-wrap{ position:relative; flex:1; display:flex; align-items:center; justify-content:center; z-index:2; }
-  #figure-svg{ width:min(360px, 90%); height:auto; }
+  #figure-svg{ width:min(420px, 92%); height:auto; }
+  .vert-dot{ transition:fill .4s ease; }
+  .sensor-dot{ animation:pulse 1.6s ease-in-out infinite; }
+  .sensor-label{ font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:.04em; fill:var(--dim); }
   #viz-bottom{ position:relative; z-index:2; display:flex; justify-content:space-between; align-items:flex-end; padding:0 20px 18px; }
   .live-tag{ font-weight:600; font-size:14px; }
   .live-tag .sub{ font-weight:400; color:var(--dim); font-size:11.5px; font-family:'IBM Plex Mono',monospace; margin-top:2px; }
@@ -217,27 +220,57 @@
           <h2>Live Session</h2>
         </div>
         <div id="figure-wrap">
-          <svg id="figure-svg" viewBox="0 0 320 340" xmlns="http://www.w3.org/2000/svg">
+          <svg id="figure-svg" viewBox="0 0 400 340" xmlns="http://www.w3.org/2000/svg">
             <!-- floor -->
-            <line x1="20" y1="316" x2="300" y2="316" stroke="#1b2536" stroke-width="2"/>
-            <!-- chair (static) -->
-            <g id="chair" stroke="#2a3648" stroke-width="10" stroke-linecap="round" fill="none">
-              <line x1="104" y1="264" x2="104" y2="316"/>
-              <line x1="221" y1="264" x2="221" y2="316"/>
-              <line x1="221" y1="100" x2="221" y2="264"/>
-              <rect x="94" y="252" width="134" height="16" rx="8" fill="#2a3648" stroke="none"/>
+            <line x1="20" y1="316" x2="380" y2="316" stroke="#1b2536" stroke-width="2"/>
+
+            <!-- office chair (static): reclined backrest behind the hip, seat, pole + caster base -->
+            <g id="chair" fill="none">
+              <rect id="chair-backrest" x="93" y="120" width="20" height="146" rx="10" fill="#212c3d" transform="rotate(-7 103 193)"/>
+              <rect x="112" y="250" width="86" height="16" rx="8" fill="#212c3d"/>
+              <line x1="150" y1="266" x2="150" y2="298" stroke="#212c3d" stroke-width="8" stroke-linecap="round"/>
+              <ellipse cx="150" cy="300" rx="36" ry="5" fill="#212c3d"/>
+              <circle cx="118" cy="301" r="4" fill="#2a3648"/>
+              <circle cx="150" cy="304" r="4" fill="#2a3648"/>
+              <circle cx="182" cy="301" r="4" fill="#2a3648"/>
             </g>
-            <!-- lower body: hips + legs (static) -->
-            <g id="lower-body" stroke="#4a5568" stroke-width="24" stroke-linecap="round" fill="none">
-              <line x1="130" y1="248" x2="195" y2="248"/>
-              <line x1="195" y1="248" x2="195" y2="312"/>
+
+            <!-- desk + monitor screen, in front of the figure -->
+            <g id="desk">
+              <rect x="232" y="223" width="112" height="9" rx="2" fill="#212c3d"/>
+              <line x1="338" y1="232" x2="338" y2="316" stroke="#212c3d" stroke-width="6" stroke-linecap="round"/>
+              <rect x="268" y="208" width="10" height="16" fill="#212c3d"/>
+              <rect id="monitor-screen" x="243" y="140" width="80" height="70" rx="6" fill="#0d1320" stroke="#212c3d" stroke-width="2"/>
+              <rect x="251" y="150" width="64" height="6" rx="3" fill="var(--accent)" opacity="0.35"/>
+              <rect x="251" y="162" width="44" height="4" rx="2" fill="var(--accent)" opacity="0.2"/>
+              <rect x="251" y="172" width="52" height="4" rx="2" fill="var(--accent)" opacity="0.2"/>
             </g>
-            <!-- upper body: torso + head + spine, this group rotates/bends -->
+
+            <!-- lower body: hip, thigh, shin, foot (static — only the torso/spine group reacts to sensor data) -->
+            <g id="lower-body">
+              <line x1="150" y1="248" x2="215" y2="248" stroke="#d9a877" stroke-width="24" stroke-linecap="round"/>
+              <line x1="215" y1="248" x2="215" y2="312" stroke="#d9a877" stroke-width="20" stroke-linecap="round"/>
+              <rect x="207" y="308" width="32" height="10" rx="5" fill="#3d4a5c"/>
+            </g>
+
+            <!-- upper body: curvy skin-toned torso (follows the same bezier as the spine), pelvis, vertebra spine, head -->
             <g id="upper-body">
-              <line id="torso-line" x1="130" y1="248" x2="130" y2="150" stroke="#4a5568" stroke-width="26" stroke-linecap="round"/>
-              <line id="arm-line" x1="130" y1="180" x2="185" y2="235" stroke="#3d4a5c" stroke-width="12" stroke-linecap="round"/>
-              <circle id="head-circle" cx="130" cy="128" r="20" fill="#4a5568"/>
-              <path id="spine-path" d="M130,246 Q130,196 130,148" fill="none" stroke="#39e0b0" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="1,9"/>
+              <path id="arm-path" d="M150,168 Q176,196 172,206 T216,224" fill="none" stroke="#d9a877" stroke-width="11" stroke-linecap="round"/>
+              <!-- dashed reference line: where a healthy, neutral back sits — for visual comparison, like the reference chart -->
+              <path id="ref-line" d="M150,242 Q147,196 150,152" fill="none" stroke="#3a4759" stroke-width="1.5" stroke-dasharray="3,4"/>
+              <!-- torso body: same curve as the spine underneath it, thick + skin-toned, so the back visibly bows/rounds -->
+              <path id="torso-body" d="M150,246 Q150,196 150,152" fill="none" stroke="#d9a877" stroke-width="34" stroke-linecap="round"/>
+              <ellipse id="pelvis-shape" cx="150" cy="244" rx="18" ry="13" fill="#39e0b0"/>
+              <path id="spine-path" d="M150,240 Q150,196 150,152" fill="none" stroke="#39e0b0" stroke-width="2.5" stroke-linecap="round" opacity="0.75"/>
+              <g id="vert-dots"></g>
+              <g id="head-group">
+                <circle id="head-circle" cx="150" cy="130" r="19" fill="#d9a877"/>
+                <path d="M133,122 A19,19 0 0 1 167,124" fill="none" stroke="#5c4326" stroke-width="6" stroke-linecap="round"/>
+              </g>
+              <!-- sensor marker: where the MPU6050 actually sits, at the shoulder/neck -->
+              <line x1="150" y1="152" x2="176" y2="140" stroke="#4d5b6e" stroke-width="1" stroke-dasharray="2,3"/>
+              <circle id="sensor-dot" class="sensor-dot" cx="150" cy="152" r="4.5" fill="var(--accent)"/>
+              <text x="180" y="143" class="sensor-label">SENSOR</text>
             </g>
           </svg>
         </div>
@@ -442,34 +475,67 @@ function showToast(msg){
 /* ======================= 2D FIGURE (SVG) ======================= */
 const upperBody = document.getElementById('upper-body');
 const spinePath = document.getElementById('spine-path');
-const torsoLine = document.getElementById('torso-line');
-const armLine = document.getElementById('arm-line');
+const torsoBody = document.getElementById('torso-body');
+const pelvisShape = document.getElementById('pelvis-shape');
+const headGroup = document.getElementById('head-group');
 const headCircle = document.getElementById('head-circle');
+const sensorDot = document.getElementById('sensor-dot');
 const figureSvg = document.getElementById('figure-svg');
+const vertDotsGroup = document.getElementById('vert-dots');
 
-const HIP = { x: 130, y: 248 };
+const HIP = { x: 150, y: 248 };
+const VERT_COUNT = 9;
+const vertDots = [];
+for(let i=0;i<VERT_COUNT;i++){
+  const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  c.setAttribute('r', 3.2);
+  c.setAttribute('class', 'vert-dot');
+  c.setAttribute('fill', '#39e0b0');
+  vertDotsGroup.appendChild(c);
+  vertDots.push(c);
+}
+
 let displayPitch = 0, displayRoll = 0, targetPitch = 0, targetRoll = 0;
 
 function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
 function renderFigure(pitchDev, rollDev, hexColor){
-  // Forward lean rotates the whole upper body around the hip pivot.
-  const rotation = clamp(pitchDev * 0.7, -22, 34);
+  // Small overall lean (rigid rotation) PLUS a curved bow — real backs bend more than they tilt,
+  // so the bow does most of the work and the rotation is subtle.
+  const rotation = clamp(pitchDev * 0.28, -10, 14);
   upperBody.setAttribute('transform', `rotate(${rotation} ${HIP.x} ${HIP.y})`);
 
-  // Extra spine curvature (hunch) beyond the rigid lean, forward-only.
-  const hunch = clamp(pitchDev, -10, 40);
-  const bow = (hunch / 40) * 26;
+  // Bow the spine into an actual curve — forward pitch rounds the back forward (kyphosis),
+  // backward pitch arches it the other way (swayback) — same curve drives the torso body,
+  // the spine line, and the vertebra dots, so the whole back bends together and consistently.
+  const hunch = clamp(pitchDev, -14, 40);
+  const bow = hunch >= 0 ? (hunch / 40) * 42 : (hunch / 14) * 22;
   const ctrlX = HIP.x + bow;
-  spinePath.setAttribute('d', `M${HIP.x},${HIP.y - 2} Q${ctrlX},${HIP.y - 50} 130,148`);
+  const d = `M${HIP.x},${HIP.y - 4} Q${ctrlX},${HIP.y - 50} ${HIP.x - Math.min(bow*0.15,4)},152`;
+  spinePath.setAttribute('d', d);
+  torsoBody.setAttribute('d', d);
+
+  const len = spinePath.getTotalLength();
+  vertDots.forEach((dot, i)=>{
+    const t = (i + 0.5) / VERT_COUNT;
+    const p = spinePath.getPointAtLength(t * len);
+    dot.setAttribute('cx', p.x);
+    dot.setAttribute('cy', p.y);
+    dot.setAttribute('fill', hexColor);
+  });
+
+  // Forward head sits on top of the torso bow but pokes forward on its own beyond a
+  // moderate lean, so "forward head" reads as visibly different from a fully rounded back.
+  const forwardHeadShift = clamp((pitchDev - 8) * 0.7, 0, 20);
+  headGroup.setAttribute('transform', `translate(${forwardHeadShift}, 0)`);
 
   // Subtle whole-scene tilt as a hint of lateral (roll) deviation.
   const tilt = clamp(rollDev * 0.35, -9, 9);
   figureSvg.style.transform = `rotate(${tilt}deg)`;
 
+  pelvisShape.setAttribute('fill', hexColor);
   spinePath.setAttribute('stroke', hexColor);
-  torsoLine.setAttribute('stroke', hexColor === '#4a5568' ? '#4a5568' : '#4a5568');
-  headCircle.setAttribute('fill', '#4a5568');
+  torsoBody.setAttribute('stroke', hexColor === '#4a5568' ? '#d9a877' : '#e2b088');
   headCircle.style.filter = hexColor === '#4a5568' ? 'none' : `drop-shadow(0 0 6px ${hexColor}88)`;
 }
 
@@ -490,8 +556,10 @@ function healthScoreFrom(pdev, rdev){
 }
 
 function handleReading(r){
-  targetPitch = r.pitch || 0;
-  targetRoll = r.roll || 0;
+  // Use deviation-from-baseline (what actually drives classification), not raw tilt,
+  // so the figure reflects true posture deviation rather than the sensor's mounting angle.
+  targetPitch = (r.pitch_dev !== undefined && r.pitch_dev !== null) ? r.pitch_dev : (r.pitch || 0);
+  targetRoll = (r.roll_dev !== undefined && r.roll_dev !== null) ? r.roll_dev : (r.roll || 0);
   targetColor = colorFor(r.state);
 
   const label = STATE_LABELS[r.state] || r.state;
