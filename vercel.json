@@ -1,0 +1,8 @@
+{
+  "cleanUrls": true,
+  "trailingSlash": true,
+  "rewrites": [
+    { "source": "/simulation", "destination": "/simulation/index.html" },
+    { "source": "/control", "destination": "/control/index.html" }
+  ]
+}

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#060A12" />
+<title>Spinal.io — Posture Detection System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#060a12; --panel:#0c1220; --panel-line:#1b2536; --text:#e7eef5; --dim:#6b7a8d; --good:#4ce0d2; }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--bg); color:var(--text); font-family:'Space Grotesk',sans-serif;
+    min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .wrap{ max-width:640px; width:100%; text-align:center; }
+  .brand{ font-weight:700; font-size:16px; letter-spacing:0.08em; margin-bottom:8px; display:flex; align-items:center; justify-content:center; gap:8px; }
+  .brand .dot{ width:7px; height:7px; border-radius:50%; background:var(--good); box-shadow:0 0 8px var(--good); }
+  h1{ font-size:clamp(24px,4vw,34px); font-weight:600; margin:14px 0 8px; }
+  p.sub{ color:var(--dim); font-size:14px; margin-bottom:36px; }
+  .cards{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:520px){ .cards{ grid-template-columns:1fr; } }
+  a.card{
+    display:block; text-decoration:none; color:var(--text);
+    background:var(--panel); border:1px solid var(--panel-line); border-radius:14px;
+    padding:26px 20px; transition:border-color .15s, transform .15s;
+  }
+  a.card:hover{ border-color:var(--good); transform:translateY(-2px); }
+  a.card .eyebrow{ font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:0.1em; color:var(--good); text-transform:uppercase; margin-bottom:10px; display:block; }
+  a.card .title{ font-size:16px; font-weight:600; margin-bottom:6px; }
+  a.card .desc{ font-size:12.5px; color:var(--dim); line-height:1.5; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand"><span class="dot"></span>SPINAL.IO</div>
+    <h1>Real-Time Posture Detection &amp; Correction</h1>
+    <p class="sub">Raspberry Pi + MPU6050 → live posture classification</p>
+    <div class="cards">
+      <a class="card" href="/simulation/">
+        <span class="eyebrow">3D View</span>
+        <div class="title">Simulation</div>
+        <div class="desc">Live bending spine model driven by real sensor data.</div>
+      </a>
+      <a class="card" href="/control/">
+        <span class="eyebrow">Live Feed</span>
+        <div class="title">Control</div>
+        <div class="desc">Camera overlay, calibration, and sensitivity controls.</div>
+      </a>
+    </div>
+  </div>
+</body>
+</html>
