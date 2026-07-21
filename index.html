@@ -3,129 +3,155 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<meta name="theme-color" content="#060A12" />
-<title>POSE.alert — Real-Time Posture Detection</title>
+<meta name="theme-color" content="#0A0E16" />
+<title>POSE.alert — Sensor Posture Monitor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-<!-- MediaPipe Pose: client-side webcam overlay only, no video leaves the browser -->
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 <style>
   :root{
-    --bg:#060a12; --panel:#0c1220; --panel-line:#1b2536;
-    --text:#e7eef5; --dim:#6b7a8d;
-    --good:#4ce0d2; --warn:#ffb020; --alert:#ff5c6c; --unknown:#4a5568;
+    --bg:#0a0e16; --panel:#111826; --panel2:#0d1320; --line:#212c3d;
+    --text:#eef2f7; --dim:#7c8a9c; --dim2:#4d5b6e;
+    --accent:#6c8cff;
+    --good:#39e0b0; --warn:#ffb020; --alert:#ff4f64; --unknown:#4a5568;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
-  html,body{ background:var(--bg); color:var(--text); font-family:'Space Grotesk',sans-serif; height:100%; overflow:hidden; }
+  html,body{ background:var(--bg); color:var(--text); font-family:'Space Grotesk',sans-serif; height:100%; }
   .mono{ font-family:'IBM Plex Mono', monospace; }
+  button, input{ font-family:inherit; }
 
   /* ============ LOADING SCREEN ============ */
   #loading-screen{
     position:fixed; inset:0; z-index:999; background:var(--bg);
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    transition:opacity .6s ease, visibility .6s;
+    transition:opacity .5s ease, visibility .5s;
   }
   #loading-screen.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
-  .load-brand{ font-weight:700; font-size:20px; letter-spacing:0.1em; display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .load-brand{ font-weight:700; font-size:20px; letter-spacing:0.08em; display:flex; align-items:center; gap:10px; margin-bottom:10px; }
   .load-brand .dot{ width:9px; height:9px; border-radius:50%; background:var(--good); box-shadow:0 0 12px var(--good); animation:pulse 1.4s ease-in-out infinite; }
   @keyframes pulse{ 0%,100%{ opacity:1; transform:scale(1);} 50%{ opacity:.5; transform:scale(0.8);} }
-  .load-sub{ color:var(--dim); font-size:12px; letter-spacing:0.05em; margin-bottom:44px; }
-  .load-bar-wrap{ width:280px; height:2px; background:var(--panel-line); border-radius:2px; overflow:hidden; margin-bottom:16px; }
-  .load-bar{ height:100%; width:0%; background:linear-gradient(90deg, var(--good), #7cf0e4); transition:width .25s ease; }
-  .load-log{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--dim); height:16px; letter-spacing:0.02em; }
-  .load-pct{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--good); margin-top:10px; }
+  .load-sub{ color:var(--dim); font-size:12px; letter-spacing:0.05em; margin-bottom:40px; }
+  .load-bar-wrap{ width:260px; height:2px; background:var(--line); border-radius:2px; overflow:hidden; margin-bottom:14px; }
+  .load-bar{ height:100%; width:0%; background:linear-gradient(90deg, var(--good), #8ff0dc); transition:width .25s ease; }
+  .load-log{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--dim); height:16px; }
 
-  /* ============ MAIN APP ============ */
-  #app{ opacity:0; transition:opacity .6s ease; }
+  /* ============ APP SHELL ============ */
+  #app{ opacity:0; transition:opacity .5s ease; display:flex; min-height:100vh; }
   #app.revealed{ opacity:1; }
 
-  #canvas-wrap{ position:fixed; inset:0; }
-  canvas.three-canvas{ display:block; }
-
-  .topbar{
-    position:fixed; top:0; left:0; right:0; display:flex; align-items:center; justify-content:space-between;
-    padding:16px 22px; z-index:10; background:linear-gradient(180deg, rgba(6,10,18,0.9), transparent);
-    pointer-events:none;
+  /* ---- Sidebar ---- */
+  #sidebar{
+    width:220px; flex-shrink:0; background:var(--panel2); border-right:1px solid var(--line);
+    display:flex; flex-direction:column; padding:22px 16px;
   }
-  .brand{ font-weight:700; font-size:15px; letter-spacing:0.06em; display:flex; align-items:center; gap:8px; }
-  .brand .dot{ width:7px; height:7px; border-radius:50%; background:var(--good); box-shadow:0 0 8px var(--good); }
+  .brand{ font-weight:700; font-size:16px; letter-spacing:0.05em; display:flex; align-items:center; gap:8px; padding:0 8px 26px; }
+  .brand .dot{ width:8px; height:8px; border-radius:50%; background:var(--good); box-shadow:0 0 8px var(--good); }
+  nav.side-nav{ display:flex; flex-direction:column; gap:2px; }
+  .nav-item{
+    display:flex; align-items:center; gap:10px; padding:11px 12px; border-radius:9px; cursor:pointer;
+    color:var(--dim); font-size:13.5px; font-weight:500; border:none; background:none; text-align:left; width:100%;
+    transition:background .15s, color .15s;
+  }
+  .nav-item:hover{ background:rgba(255,255,255,0.03); color:var(--text); }
+  .nav-item.active{ background:rgba(108,140,255,0.12); color:var(--text); }
+  .nav-item .ic{ width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.5; flex-shrink:0; }
+  .nav-item.active .ic{ background:var(--accent); opacity:1; }
+  #sidebar-foot{ margin-top:auto; padding-top:14px; border-top:1px solid var(--line); }
   .conn-status{
-    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:0.05em; color:var(--dim);
-    border:1px solid var(--panel-line); border-radius:20px; padding:6px 12px; pointer-events:auto;
+    font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:0.04em; color:var(--dim);
+    border:1px solid var(--line); border-radius:20px; padding:6px 10px; display:inline-flex; align-items:center; gap:6px;
   }
-  .conn-status.live{ color:var(--good); border-color:rgba(76,224,210,0.35); }
-  .conn-status .dot{ display:inline-block; width:6px; height:6px; border-radius:50%; background:currentColor; margin-right:6px; }
+  .conn-status.live{ color:var(--good); border-color:rgba(57,224,176,0.35); }
+  .conn-status .dot{ width:6px; height:6px; border-radius:50%; background:currentColor; }
+
+  /* ---- Main ---- */
+  #main{ flex:1; min-width:0; padding:26px 32px 32px; overflow-y:auto; }
+  .view{ display:none; }
+  .view.active{ display:block; }
+  .view-header{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:20px; }
+  .view-header h1{ font-size:24px; font-weight:700; letter-spacing:-0.01em; }
+  .view-sub{ color:var(--dim); font-size:12.5px; margin-top:3px; }
 
   .panel{
-    background:rgba(12,18,32,0.78); border:1px solid var(--panel-line); border-radius:14px;
-    backdrop-filter:blur(10px); padding:16px 18px;
+    background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px 20px;
   }
-  .panel h2{ font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--dim); margin-bottom:12px; }
+  .panel h2{ font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--dim); margin-bottom:12px; font-weight:600; }
 
-  /* Left column: state + telemetry */
-  #left-col{ position:fixed; top:70px; left:22px; z-index:10; width:230px; display:flex; flex-direction:column; gap:14px; }
-  #state-value{ font-size:21px; font-weight:600; margin-bottom:4px; transition:color .3s; }
-  #state-sub{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--dim); }
-  #sustain-bar-wrap{ margin-top:12px; height:3px; background:var(--panel-line); border-radius:2px; overflow:hidden; }
-  #sustain-bar{ height:100%; width:0%; background:var(--warn); transition:width .3s, background .3s; }
-  .tele-row{ display:flex; justify-content:space-between; align-items:baseline; padding:6px 0; border-bottom:1px solid var(--panel-line); }
-  .tele-row:last-child{ border-bottom:none; }
-  .tele-key{ font-size:11px; color:var(--dim); }
-  .tele-val{ font-family:'IBM Plex Mono',monospace; font-size:13px; font-weight:600; }
+  /* stat cards */
+  .stats-row{ display:grid; grid-template-columns:1.6fr 1fr 1fr; gap:14px; margin-bottom:16px; }
+  .stat-card .stat-label{ font-size:11px; color:var(--dim); letter-spacing:0.04em; text-transform:uppercase; margin-bottom:10px; }
+  .stat-card .stat-value{ font-size:32px; font-weight:700; font-family:'IBM Plex Mono',monospace; line-height:1; }
+  .stat-card .stat-value.status-good{ color:var(--good); }
+  .stat-card .stat-value.status-bad{ color:var(--alert); }
+  .stat-card .stat-value.status-neutral{ color:var(--dim2); }
+  .stat-card .stat-foot{ margin-top:8px; font-size:11px; color:var(--dim); }
 
-  /* Right column: camera + thresholds, scrollable on small screens */
-  #right-col{
-    position:fixed; top:70px; right:22px; bottom:22px; z-index:10; width:300px;
-    display:flex; flex-direction:column; gap:14px; overflow-y:auto;
+  /* visualization panel */
+  #viz-panel{ position:relative; padding:0; overflow:hidden; min-height:420px; display:flex; flex-direction:column; }
+  #viz-glow{ position:absolute; inset:0; opacity:0.5; transition:background 0.6s ease; pointer-events:none; }
+  #viz-top{ position:relative; z-index:2; display:flex; justify-content:space-between; align-items:center; padding:16px 20px 0; }
+  #viz-top h2{ margin:0; }
+  #figure-wrap{ position:relative; flex:1; display:flex; align-items:center; justify-content:center; z-index:2; }
+  #figure-svg{ width:min(360px, 90%); height:auto; }
+  #viz-bottom{ position:relative; z-index:2; display:flex; justify-content:space-between; align-items:flex-end; padding:0 20px 18px; }
+  .live-tag{ font-weight:600; font-size:14px; }
+  .live-tag .sub{ font-weight:400; color:var(--dim); font-size:11.5px; font-family:'IBM Plex Mono',monospace; margin-top:2px; }
+
+  /* telemetry strip */
+  #telemetry-row{ display:grid; grid-template-columns:repeat(5, 1fr); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:12px; overflow:hidden; margin-top:16px; }
+  .tele-cell{ background:var(--panel); padding:12px 14px; }
+  .tele-cell .k{ font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px; }
+  .tele-cell .v{ font-family:'IBM Plex Mono',monospace; font-size:15px; font-weight:600; }
+
+  /* buttons */
+  .btn-row{ display:flex; gap:10px; }
+  button.action{
+    padding:11px 14px; border-radius:9px; border:1px solid var(--line); background:#0d1320;
+    color:var(--text); font-size:12.5px; cursor:pointer; transition:border-color .15s, background .15s;
   }
-  #right-col::-webkit-scrollbar{ width:4px; }
-  #right-col::-webkit-scrollbar-thumb{ background:var(--panel-line); border-radius:4px; }
+  button.action:hover{ border-color:var(--accent); }
+  button.action.primary{ background:var(--good); color:#04241c; border:none; font-weight:600; }
+  button.action.primary:hover{ opacity:.92; }
+  button.action.full{ width:100%; }
 
-  #video-wrap{ position:relative; border-radius:10px; overflow:hidden; background:#000; aspect-ratio:4/3; }
-  video, canvas.overlay{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
-  #cam-status{
-    position:absolute; top:8px; left:8px; z-index:5; font-family:'IBM Plex Mono',monospace; font-size:9px;
-    padding:4px 9px; border-radius:20px; background:rgba(6,10,18,0.7); border:1px solid var(--panel-line); color:var(--dim);
-  }
-  #cam-status.live{ color:var(--good); border-color:rgba(76,224,210,0.35); }
-  #start-cam-btn{ margin-top:10px; width:100%; padding:10px; border:none; border-radius:9px; background:var(--good); color:#04141a; font-weight:600; cursor:pointer; font-size:12px; }
-  #posture-hint{ margin-top:10px; padding:9px 11px; border-radius:9px; background:#0a0f1c; border:1px solid var(--panel-line); font-size:11.5px; color:var(--dim); line-height:1.4; }
-
-  .control-row{ margin-bottom:14px; }
-  .control-row label{ display:flex; justify-content:space-between; font-size:11px; color:var(--dim); margin-bottom:6px; }
+  /* settings sliders */
+  .control-row{ margin-bottom:16px; }
+  .control-row label{ display:flex; justify-content:space-between; font-size:12px; color:var(--dim); margin-bottom:8px; }
   .control-row label span.val{ color:var(--text); font-family:'IBM Plex Mono',monospace; }
   input[type=range]{ width:100%; accent-color:var(--good); }
 
-  .btn-row{ display:flex; gap:8px; margin-bottom:14px; }
-  button.action{
-    flex:1; padding:10px 8px; border-radius:9px; border:1px solid var(--panel-line); background:#0a0f1c;
-    color:var(--text); font-family:'Space Grotesk',sans-serif; font-size:11.5px; cursor:pointer; transition:border-color .15s;
-  }
-  button.action:hover{ border-color:var(--good); }
-  button.action.primary{ background:var(--good); color:#04141a; border:none; font-weight:600; }
-  button.action.small{ width:100%; }
+  .grid-2{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
 
-  #legend-panel{ position:fixed; bottom:22px; left:22px; z-index:10; display:flex; gap:14px; padding:10px 16px; }
-  .legend-item{ display:flex; align-items:center; gap:6px; font-size:11px; color:var(--dim); }
-  .legend-swatch{ width:8px; height:8px; border-radius:50%; }
+  /* analytics chart */
+  #chart-wrap{ background:var(--panel2); border-radius:10px; padding:14px; }
+  #chart-svg{ width:100%; height:220px; display:block; }
+  .chart-legend{ display:flex; gap:16px; margin-top:10px; font-size:11px; color:var(--dim); }
+  .chart-legend .sw{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; }
+
+  /* device card */
+  .device-card{ display:flex; align-items:center; gap:14px; margin-bottom:16px; }
+  .device-dot{ width:10px; height:10px; border-radius:50%; background:var(--unknown); flex-shrink:0; }
+  .device-dot.live{ background:var(--good); box-shadow:0 0 8px var(--good); }
+  .device-name{ font-weight:600; font-size:14px; }
+  .device-sub{ font-size:11.5px; color:var(--dim); font-family:'IBM Plex Mono',monospace; margin-top:2px; }
+
+  /* logout view */
+  #view-logout .panel{ max-width:360px; text-align:center; padding:40px 24px; }
 
   #toast{
-    position:fixed; top:70px; left:50%; transform:translateX(-50%) translateY(-10px); z-index:20;
-    background:var(--panel); border:1px solid var(--panel-line); border-radius:10px; padding:10px 16px;
+    position:fixed; top:20px; left:50%; transform:translateX(-50%) translateY(-10px); z-index:50;
+    background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 16px;
     font-size:12px; opacity:0; pointer-events:none; transition:opacity .3s, transform .3s;
   }
   #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 
   @media (max-width:900px){
-    #left-col{ width:170px; }
-    #right-col{ width:190px; top:auto; bottom:22px; right:22px; max-height:60vh; }
-    #legend-panel{ display:none; }
-    .panel{ padding:12px 14px; }
-    #state-value{ font-size:16px; }
+    #sidebar{ width:76px; }
+    .brand span:not(.dot){ display:none; }
+    .nav-item span:not(.ic){ display:none; }
+    #main{ padding:20px; }
+    .stats-row{ grid-template-columns:1fr; }
+    #telemetry-row{ grid-template-columns:repeat(2,1fr); }
   }
 </style>
 </head>
@@ -133,87 +159,194 @@
 
 <!-- ============ LOADING SCREEN ============ -->
 <div id="loading-screen">
-  <div class="load-brand"><span class="dot"></span>POSE.ALERT</div>
-  <div class="load-sub mono">REAL-TIME POSTURE DETECTION &amp; CORRECTION</div>
+  <div class="load-brand"><span class="dot"></span>POSE.alert</div>
+  <div class="load-sub mono">SENSOR-BASED POSTURE MONITORING</div>
   <div class="load-bar-wrap"><div class="load-bar" id="load-bar"></div></div>
   <div class="load-log mono" id="load-log">Booting system…</div>
-  <div class="load-pct" id="load-pct">0%</div>
 </div>
 
-<!-- ============ MAIN APP ============ -->
+<!-- ============ APP ============ -->
 <div id="app">
-  <div id="canvas-wrap"></div>
 
-  <div class="topbar">
-    <div class="brand"><span class="dot"></span>POSE.ALERT</div>
-    <div class="conn-status mono" id="conn-status"><span class="dot"></span>CONNECTING</div>
-  </div>
-
-  <div id="left-col">
-    <div class="panel" id="state-panel">
-      <h2>Posture State</h2>
-      <div id="state-value">—</div>
-      <div id="state-sub" class="mono">awaiting calibration</div>
-      <div id="sustain-bar-wrap"><div id="sustain-bar"></div></div>
+  <aside id="sidebar">
+    <div class="brand"><span class="dot"></span><span>POSE.alert</span></div>
+    <nav class="side-nav">
+      <button class="nav-item active" data-view="dashboard"><span class="ic"></span><span>Dashboard</span></button>
+      <button class="nav-item" data-view="analytics"><span class="ic"></span><span>Analytics</span></button>
+      <button class="nav-item" data-view="devices"><span class="ic"></span><span>Devices</span></button>
+      <button class="nav-item" data-view="settings"><span class="ic"></span><span>Settings</span></button>
+      <button class="nav-item" data-view="logout"><span class="ic"></span><span>Logout</span></button>
+    </nav>
+    <div id="sidebar-foot">
+      <div class="conn-status mono" id="conn-status"><span class="dot"></span><span>CONNECTING</span></div>
     </div>
+  </aside>
 
-    <div class="panel" id="telemetry-panel">
-      <h2>Telemetry</h2>
-      <div class="tele-row"><span class="tele-key">PITCH</span><span class="tele-val mono" id="tv-pitch">0.0°</span></div>
-      <div class="tele-row"><span class="tele-key">ROLL</span><span class="tele-val mono" id="tv-roll">0.0°</span></div>
-      <div class="tele-row"><span class="tele-key">PITCH Δ</span><span class="tele-val mono" id="tv-pdev">0.0°</span></div>
-      <div class="tele-row"><span class="tele-key">ROLL Δ</span><span class="tele-val mono" id="tv-rdev">0.0°</span></div>
-      <div class="tele-row"><span class="tele-key">SUSTAINED</span><span class="tele-val mono" id="tv-sustain">0s</span></div>
-    </div>
-  </div>
+  <main id="main">
 
-  <div id="right-col">
-    <div class="panel">
-      <h2>Live Camera</h2>
-      <div id="video-wrap">
-        <span id="cam-status" class="mono">CAMERA OFF</span>
-        <video id="video" playsinline style="display:none;"></video>
-        <canvas id="overlay" class="overlay"></canvas>
-      </div>
-      <button id="start-cam-btn">Start Camera</button>
-      <div id="posture-hint">Runs entirely in your browser — no video leaves this page.</div>
-    </div>
-
-    <div class="panel">
-      <h2>Sensor Controls</h2>
-      <div class="btn-row">
-        <button class="action primary" id="btn-calibrate">Calibrate</button>
-        <button class="action" id="btn-buzzer">Test Buzzer</button>
+    <!-- ============ DASHBOARD ============ -->
+    <section class="view active" id="view-dashboard">
+      <div class="view-header">
+        <div>
+          <h1>Dashboard</h1>
+          <div class="view-sub">Live posture reading from the sensor node</div>
+        </div>
       </div>
 
-      <div class="control-row">
-        <label>Forward head <span class="val" id="val-fh">12°</span></label>
-        <input type="range" id="slider-fh" min="4" max="30" value="12" />
+      <div class="stats-row">
+        <div class="panel stat-card">
+          <div class="stat-label">Health Score</div>
+          <div class="stat-value status-neutral" id="stat-health">—</div>
+          <div class="stat-foot">out of 100, from current deviation</div>
+        </div>
+        <div class="panel stat-card">
+          <div class="stat-label">Angle</div>
+          <div class="stat-value status-neutral" id="stat-angle">—</div>
+          <div class="stat-foot">forward/back deviation</div>
+        </div>
+        <div class="panel stat-card">
+          <div class="stat-label">Status</div>
+          <div class="stat-value status-neutral" id="stat-status">—</div>
+          <div class="stat-foot" id="stat-status-sub">awaiting data</div>
+        </div>
       </div>
-      <div class="control-row">
-        <label>Kyphosis <span class="val" id="val-kyp">20°</span></label>
-        <input type="range" id="slider-kyp" min="10" max="40" value="20" />
-      </div>
-      <div class="control-row">
-        <label>Lateral lean <span class="val" id="val-lat">10°</span></label>
-        <input type="range" id="slider-lat" min="4" max="25" value="10" />
-      </div>
-      <div class="control-row">
-        <label>Alert after <span class="val" id="val-sus">15s</span></label>
-        <input type="range" id="slider-sus" min="5" max="60" value="15" />
-      </div>
-      <button class="action small" id="btn-apply">Apply Thresholds</button>
-    </div>
-  </div>
 
-  <div class="panel" id="legend-panel">
-    <div class="legend-item"><span class="legend-swatch" style="background:var(--good)"></span>Good</div>
-    <div class="legend-item"><span class="legend-swatch" style="background:var(--warn)"></span>Forward Head / Swayback</div>
-    <div class="legend-item"><span class="legend-swatch" style="background:var(--alert)"></span>Kyphosis / Lean</div>
-  </div>
+      <div class="panel" id="viz-panel">
+        <div id="viz-glow"></div>
+        <div id="viz-top">
+          <h2>Live Session</h2>
+        </div>
+        <div id="figure-wrap">
+          <svg id="figure-svg" viewBox="0 0 320 340" xmlns="http://www.w3.org/2000/svg">
+            <!-- floor -->
+            <line x1="20" y1="316" x2="300" y2="316" stroke="#1b2536" stroke-width="2"/>
+            <!-- chair (static) -->
+            <g id="chair" stroke="#2a3648" stroke-width="10" stroke-linecap="round" fill="none">
+              <line x1="104" y1="264" x2="104" y2="316"/>
+              <line x1="221" y1="264" x2="221" y2="316"/>
+              <line x1="221" y1="100" x2="221" y2="264"/>
+              <rect x="94" y="252" width="134" height="16" rx="8" fill="#2a3648" stroke="none"/>
+            </g>
+            <!-- lower body: hips + legs (static) -->
+            <g id="lower-body" stroke="#4a5568" stroke-width="24" stroke-linecap="round" fill="none">
+              <line x1="130" y1="248" x2="195" y2="248"/>
+              <line x1="195" y1="248" x2="195" y2="312"/>
+            </g>
+            <!-- upper body: torso + head + spine, this group rotates/bends -->
+            <g id="upper-body">
+              <line id="torso-line" x1="130" y1="248" x2="130" y2="150" stroke="#4a5568" stroke-width="26" stroke-linecap="round"/>
+              <line id="arm-line" x1="130" y1="180" x2="185" y2="235" stroke="#3d4a5c" stroke-width="12" stroke-linecap="round"/>
+              <circle id="head-circle" cx="130" cy="128" r="20" fill="#4a5568"/>
+              <path id="spine-path" d="M130,246 Q130,196 130,148" fill="none" stroke="#39e0b0" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="1,9"/>
+            </g>
+          </svg>
+        </div>
+        <div id="viz-bottom">
+          <div class="live-tag">Live Session<div class="sub" id="viz-substate">sensor monitoring active</div></div>
+        </div>
+      </div>
 
-  <div id="toast" class="mono"></div>
+      <div id="telemetry-row">
+        <div class="tele-cell"><div class="k">Pitch</div><div class="v mono" id="tv-pitch">0.0°</div></div>
+        <div class="tele-cell"><div class="k">Roll</div><div class="v mono" id="tv-roll">0.0°</div></div>
+        <div class="tele-cell"><div class="k">Pitch Δ</div><div class="v mono" id="tv-pdev">0.0°</div></div>
+        <div class="tele-cell"><div class="k">Roll Δ</div><div class="v mono" id="tv-rdev">0.0°</div></div>
+        <div class="tele-cell"><div class="k">Sustained</div><div class="v mono" id="tv-sustain">0s</div></div>
+      </div>
+    </section>
+
+    <!-- ============ ANALYTICS ============ -->
+    <section class="view" id="view-analytics">
+      <div class="view-header">
+        <div>
+          <h1>Analytics</h1>
+          <div class="view-sub">Pitch deviation over the last readings</div>
+        </div>
+        <button class="action" id="btn-refresh-history">Refresh</button>
+      </div>
+      <div class="panel">
+        <h2>Pitch Deviation History</h2>
+        <div id="chart-wrap">
+          <svg id="chart-svg" viewBox="0 0 600 220" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="chart-legend">
+          <span><span class="sw" style="background:var(--good)"></span>Good</span>
+          <span><span class="sw" style="background:var(--warn)"></span>Forward head / Swayback / Lean</span>
+          <span><span class="sw" style="background:var(--alert)"></span>Kyphosis</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ DEVICES ============ -->
+    <section class="view" id="view-devices">
+      <div class="view-header">
+        <div>
+          <h1>Devices</h1>
+          <div class="view-sub">Sensor node connection and calibration</div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Sensor Node</h2>
+        <div class="device-card">
+          <div class="device-dot" id="device-dot"></div>
+          <div>
+            <div class="device-name">Raspberry Pi + MPU6050</div>
+            <div class="device-sub" id="device-sub">checking connection…</div>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="action primary" id="btn-calibrate">Calibrate Neutral</button>
+          <button class="action" id="btn-buzzer">Test Buzzer</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ SETTINGS ============ -->
+    <section class="view" id="view-settings">
+      <div class="view-header">
+        <div>
+          <h1>Settings</h1>
+          <div class="view-sub">Sensitivity thresholds for posture classification</div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Thresholds</h2>
+        <div class="grid-2">
+          <div class="control-row">
+            <label>Forward head <span class="val" id="val-fh">12°</span></label>
+            <input type="range" id="slider-fh" min="4" max="30" value="12" />
+          </div>
+          <div class="control-row">
+            <label>Kyphosis <span class="val" id="val-kyp">20°</span></label>
+            <input type="range" id="slider-kyp" min="10" max="40" value="20" />
+          </div>
+          <div class="control-row">
+            <label>Lateral lean <span class="val" id="val-lat">10°</span></label>
+            <input type="range" id="slider-lat" min="4" max="25" value="10" />
+          </div>
+          <div class="control-row">
+            <label>Alert after <span class="val" id="val-sus">15s</span></label>
+            <input type="range" id="slider-sus" min="5" max="60" value="15" />
+          </div>
+        </div>
+        <button class="action primary full" id="btn-apply">Apply Thresholds</button>
+      </div>
+    </section>
+
+    <!-- ============ LOGOUT ============ -->
+    <section class="view" id="view-logout">
+      <div class="view-header"><h1>Logout</h1></div>
+      <div class="panel">
+        <div style="font-size:15px; font-weight:600; margin-bottom:8px;">You're signed out</div>
+        <div style="color:var(--dim); font-size:12.5px; margin-bottom:20px;">Sensor monitoring keeps running on the backend.</div>
+        <button class="action primary full" id="btn-relogin">Sign back in</button>
+      </div>
+    </section>
+
+  </main>
 </div>
+
+<div id="toast" class="mono"></div>
 
 <script>
 /* ======================= CONFIG ======================= */
@@ -223,245 +356,69 @@ const POLL_MS = 1000;
 /* ======================= LOADING SEQUENCE ======================= */
 const loadBar = document.getElementById('load-bar');
 const loadLog = document.getElementById('load-log');
-const loadPct = document.getElementById('load-pct');
 const loadingScreen = document.getElementById('loading-screen');
 const appEl = document.getElementById('app');
-
 const bootSteps = [
-  { pct: 15, msg: 'Booting system…' },
-  { pct: 35, msg: 'Loading render engine…' },
-  { pct: 55, msg: 'Initializing sensor bridge…' },
-  { pct: 75, msg: 'Connecting to backend…' },
+  { pct: 20, msg: 'Booting system…' },
+  { pct: 45, msg: 'Initializing sensor bridge…' },
+  { pct: 70, msg: 'Connecting to backend…' },
   { pct: 92, msg: 'Calibrating interface…' },
   { pct: 100, msg: 'Ready.' },
 ];
 let bootIndex = 0;
 function runBootStep(){
   if(bootIndex >= bootSteps.length){
-    setTimeout(()=>{
-      loadingScreen.classList.add('hidden');
-      appEl.classList.add('revealed');
-    }, 250);
+    setTimeout(()=>{ loadingScreen.classList.add('hidden'); appEl.classList.add('revealed'); }, 200);
     return;
   }
   const step = bootSteps[bootIndex];
   loadBar.style.width = step.pct + '%';
-  loadPct.textContent = step.pct + '%';
   loadLog.textContent = step.msg;
   bootIndex++;
-  setTimeout(runBootStep, 380);
+  setTimeout(runBootStep, 320);
 }
 runBootStep();
 
-/* ======================= THREE.JS SCENE — SEATED FIGURE ======================= */
-/* A figure sitting in an office chair, spine + pelvis visible "x-ray" style through a
-   translucent torso, bending live from the backend's pitch/roll — same idea as the
-   "Anatomy of Sitting" reference: neutral pelvis + upright spine = good; flattened
-   lumbar curve / forward head under sustained slouch = warn/alert coloring. */
-const wrap = document.getElementById('canvas-wrap');
-const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x060a12, 0.05);
+/* ======================= NAV / VIEW SWITCHING ======================= */
+const navItems = document.querySelectorAll('.nav-item');
+const views = document.querySelectorAll('.view');
+navItems.forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    navItems.forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const target = 'view-' + btn.dataset.view;
+    views.forEach(v=> v.classList.toggle('active', v.id === target));
+    if(btn.dataset.view === 'analytics') fetchHistory();
+  });
+});
+document.getElementById('btn-relogin').addEventListener('click', ()=>{
+  navItems.forEach(b=>b.classList.remove('active'));
+  document.querySelector('.nav-item[data-view="dashboard"]').classList.add('active');
+  views.forEach(v=> v.classList.toggle('active', v.id === 'view-dashboard'));
+});
 
-const camera = new THREE.PerspectiveCamera(42, window.innerWidth/window.innerHeight, 0.1, 100);
-camera.position.set(3.6, 2.15, 4.7);
-camera.lookAt(0, 1.25, 0.1);
-
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-renderer.domElement.classList.add('three-canvas');
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-wrap.appendChild(renderer.domElement);
-
-const grid = new THREE.GridHelper(40, 40, 0x1b2536, 0x11182a);
-grid.position.y = -0.01;
-scene.add(grid);
-
-const ambient = new THREE.AmbientLight(0x8899bb, 0.65);
-scene.add(ambient);
-const key = new THREE.PointLight(0x4ce0d2, 1.3, 30);
-key.position.set(3, 6, 4);
-scene.add(key);
-const rim = new THREE.PointLight(0xff5c6c, 0.45, 30);
-rim.position.set(-4, 3, -3);
-scene.add(rim);
-
-const colorFor = (state) => {
-  switch(state){
-    case 'good': return 0x4ce0d2;
-    case 'forward_head': return 0xffb020;
-    case 'swayback': return 0xffb020;
-    case 'lateral_lean': return 0xffb020;
-    case 'kyphosis': return 0xff5c6c;
-    default: return 0x4a5568;
-  }
+/* ======================= STATE / COLOR HELPERS ======================= */
+const STATE_LABELS = {
+  good: 'Good Posture', forward_head: 'Forward Head', kyphosis: 'Kyphosis (Rounded Back)',
+  swayback: 'Swayback', lateral_lean: 'Lateral Lean', uncalibrated: 'Not Calibrated', unknown: 'No Data',
 };
+const STATE_COLORS = {
+  good: '#39e0b0', forward_head: '#ffb020', swayback: '#ffb020', lateral_lean: '#ffb020',
+  kyphosis: '#ff4f64', uncalibrated: '#4a5568', unknown: '#4a5568',
+};
+function colorFor(state){ return STATE_COLORS[state] || '#4a5568'; }
 
-const figureGroup = new THREE.Group();
-scene.add(figureGroup);
-
-/* ---- materials ---- */
-const chairMat = new THREE.MeshStandardMaterial({ color: 0x151d2e, roughness: 0.55, metalness: 0.35 });
-const skinMat  = new THREE.MeshStandardMaterial({ color: 0xd9a877, roughness: 0.6, metalness: 0.05, transparent: true, opacity: 0.9 });
-const shellMat = new THREE.MeshStandardMaterial({ color: 0xd9a877, roughness: 0.6, metalness: 0.05, transparent: true, opacity: 0.28, depthWrite: false });
-const hairMat  = new THREE.MeshStandardMaterial({ color: 0x7a5230, roughness: 0.7 });
-
-/* ---- chair: seat + reclined backrest + four legs ---- */
-const SEAT_Y = 1.0;
-const chair = new THREE.Group();
-const seat = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.12, 1.05), chairMat);
-seat.position.set(0, SEAT_Y, 0);
-chair.add(seat);
-
-const backrest = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.25, 0.12), chairMat);
-backrest.position.set(0, SEAT_Y + 0.68, -0.48);
-backrest.rotation.x = THREE.MathUtils.degToRad(-8);
-chair.add(backrest);
-
-const legGeo = new THREE.CylinderGeometry(0.04, 0.04, SEAT_Y - 0.06, 10);
-[[0.5,0.45],[-0.5,0.45],[0.5,-0.45],[-0.5,-0.45]].forEach(([x,z])=>{
-  const leg = new THREE.Mesh(legGeo, chairMat);
-  leg.position.set(x, (SEAT_Y - 0.06)/2, z);
-  chair.add(leg);
-});
-figureGroup.add(chair);
-
-/* ---- pelvis — the "neutral pelvic position" anchor, recolored with posture state ---- */
-const pelvisMat = new THREE.MeshStandardMaterial({ color: 0x4a5568, emissive: 0x0d3b38, emissiveIntensity: 0.55, roughness: 0.25, metalness: 0.4 });
-const pelvis = new THREE.Mesh(new THREE.SphereGeometry(0.22, 20, 16), pelvisMat);
-pelvis.scale.set(1.3, 0.8, 1);
-pelvis.position.set(0, SEAT_Y + 0.16, 0.05);
-figureGroup.add(pelvis);
-
-/* ---- legs (thigh + shin + foot, static — only the spine reacts to posture) ---- */
-function makeLeg(xSide){
-  const g = new THREE.Group();
-  const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.09, 0.55, 12), skinMat);
-  thigh.rotation.x = Math.PI/2;
-  thigh.position.set(xSide, SEAT_Y + 0.14, 0.32);
-  g.add(thigh);
-  const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.07, SEAT_Y - 0.05, 12), skinMat);
-  shin.position.set(xSide, (SEAT_Y - 0.05)/2, 0.58);
-  g.add(shin);
-  const foot = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, 0.28), skinMat);
-  foot.position.set(xSide, 0.04, 0.7);
-  g.add(foot);
-  return g;
-}
-figureGroup.add(makeLeg(0.18));
-figureGroup.add(makeLeg(-0.18));
-
-/* ---- spine: this is what bends live with sensor pitch/roll ---- */
-const SEGMENTS = 9;
-const SEGMENT_HEIGHT = 0.15;
-const spineGroup = new THREE.Group();
-spineGroup.position.set(0, SEAT_Y + 0.18, 0.05);
-figureGroup.add(spineGroup);
-
-const vertebraGeo = new THREE.SphereGeometry(0.075, 16, 16);
-const linkGeo = new THREE.CylinderGeometry(0.03, 0.03, SEGMENT_HEIGHT, 8);
-
-const bones = [];
-let prevPivot = new THREE.Object3D();
-spineGroup.add(prevPivot);
-
-for(let i=0;i<SEGMENTS;i++){
-  const pivot = new THREE.Object3D();
-  pivot.position.set(0, i===0 ? 0 : SEGMENT_HEIGHT, 0);
-  prevPivot.add(pivot);
-
-  const link = new THREE.Mesh(linkGeo, new THREE.MeshStandardMaterial({
-    color: 0x4a5568, emissive: 0x0d3b38, emissiveIntensity: 0.45, roughness: 0.3, metalness: 0.4
-  }));
-  link.position.set(0, SEGMENT_HEIGHT/2, 0);
-  pivot.add(link);
-
-  const vert = new THREE.Mesh(vertebraGeo, new THREE.MeshStandardMaterial({
-    color: 0x4a5568, emissive: 0x0d3b38, emissiveIntensity: 0.65, roughness: 0.2, metalness: 0.5
-  }));
-  vert.position.set(0, SEGMENT_HEIGHT, 0);
-  pivot.add(vert);
-
-  bones.push({ pivot, link, vert });
-  prevPivot = pivot;
-}
-const shoulderPivot = prevPivot; // top of spine chain — head + arms hang off this
-
-/* ---- head, following the top of the spine so "forward head" is visibly forward ---- */
-const headGroup = new THREE.Group();
-headGroup.position.set(0, SEGMENT_HEIGHT + 0.1, 0);
-shoulderPivot.add(headGroup);
-const head = new THREE.Mesh(new THREE.SphereGeometry(0.14, 20, 20), skinMat);
-headGroup.add(head);
-const hair = new THREE.Mesh(new THREE.SphereGeometry(0.145, 20, 20, 0, Math.PI*2, 0, Math.PI*0.55), hairMat);
-hair.position.y = 0.02;
-headGroup.add(hair);
-
-/* ---- translucent torso shell — the "x-ray" skin so the colored spine reads clearly ---- */
-const torsoShell = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.3, SEGMENTS*SEGMENT_HEIGHT*0.92, 16), shellMat);
-torsoShell.position.set(0, SEGMENTS*SEGMENT_HEIGHT*0.46, 0);
-spineGroup.add(torsoShell);
-
-/* ---- arms, hanging from the shoulders and resting toward the thighs ---- */
-function makeArm(xSide){
-  const g = new THREE.Group();
-  const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.055, 0.42, 10), skinMat);
-  upper.position.set(xSide, -0.21, 0);
-  upper.rotation.z = THREE.MathUtils.degToRad(xSide > 0 ? -8 : 8);
-  g.add(upper);
-  const lower = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.045, 0.4, 10), skinMat);
-  lower.position.set(xSide*1.15, -0.55, 0.22);
-  lower.rotation.x = THREE.MathUtils.degToRad(65);
-  g.add(lower);
-  return g;
-}
-shoulderPivot.add(makeArm(0.26));
-shoulderPivot.add(makeArm(-0.26));
-
-function updateSpineColor(state){
-  const c = colorFor(state);
-  bones.forEach(b=>{
-    b.link.material.color.setHex(c); b.link.material.emissive.setHex(c);
-    b.vert.material.color.setHex(c); b.vert.material.emissive.setHex(c);
-  });
-  pelvisMat.color.setHex(c); pelvisMat.emissive.setHex(c);
-}
-
-let displayPitch = 0, displayRoll = 0, targetPitch = 0, targetRoll = 0;
-function applyBend(pitchDeg, rollDeg){
-  const pitchRad = THREE.MathUtils.degToRad(pitchDeg);
-  const rollRad = THREE.MathUtils.degToRad(rollDeg);
-  bones.forEach((b, i)=>{
-    const weight = (i+1) / SEGMENTS;
-    b.pivot.rotation.x = pitchRad * weight * 0.85;
-    b.pivot.rotation.z = rollRad * weight * 0.6;
-  });
-  // torso shell leans as a whole with the average curve, so the "skin" tracks the skeleton inside it
-  torsoShell.rotation.x = pitchRad * 0.5;
-  torsoShell.rotation.z = rollRad * 0.35;
-}
-
-window.addEventListener('resize', ()=>{
-  camera.aspect = window.innerWidth/window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
-
-function animate(){
-  requestAnimationFrame(animate);
-  displayPitch += (targetPitch - displayPitch) * 0.08;
-  displayRoll += (targetRoll - displayRoll) * 0.08;
-  applyBend(displayPitch, displayRoll);
-  figureGroup.rotation.y = 0.4 + Math.sin(Date.now()*0.00015)*0.05;
-  renderer.render(scene, camera);
-}
-animate();
-
-/* ======================= DATA LAYER ======================= */
+/* ======================= DOM REFS ======================= */
 const el = {
   conn: document.getElementById('conn-status'),
-  stateVal: document.getElementById('state-value'),
-  stateSub: document.getElementById('state-sub'),
-  sustainBar: document.getElementById('sustain-bar'),
+  deviceDot: document.getElementById('device-dot'),
+  deviceSub: document.getElementById('device-sub'),
+  health: document.getElementById('stat-health'),
+  angle: document.getElementById('stat-angle'),
+  status: document.getElementById('stat-status'),
+  statusSub: document.getElementById('stat-status-sub'),
+  vizGlow: document.getElementById('viz-glow'),
+  vizSub: document.getElementById('viz-substate'),
   pitch: document.getElementById('tv-pitch'),
   roll: document.getElementById('tv-roll'),
   pdev: document.getElementById('tv-pdev'),
@@ -470,14 +427,11 @@ const el = {
   toast: document.getElementById('toast'),
 };
 
-const STATE_LABELS = {
-  good: 'Good Posture', forward_head: 'Forward Head', kyphosis: 'Kyphosis (Rounded Back)',
-  swayback: 'Swayback', lateral_lean: 'Lateral Lean', uncalibrated: 'Not Calibrated', unknown: 'No Data',
-};
-
 function setConn(live){
   el.conn.classList.toggle('live', live);
-  el.conn.innerHTML = `<span class="dot"></span>${live ? 'LIVE' : 'CONNECTING'}`;
+  el.conn.querySelector('span:last-child').textContent = live ? 'LIVE' : 'CONNECTING';
+  el.deviceDot.classList.toggle('live', live);
+  el.deviceSub.textContent = live ? BACKEND_URL : 'not connected yet';
 }
 function showToast(msg){
   el.toast.textContent = msg;
@@ -485,16 +439,78 @@ function showToast(msg){
   setTimeout(()=>el.toast.classList.remove('show'), 2200);
 }
 
+/* ======================= 2D FIGURE (SVG) ======================= */
+const upperBody = document.getElementById('upper-body');
+const spinePath = document.getElementById('spine-path');
+const torsoLine = document.getElementById('torso-line');
+const armLine = document.getElementById('arm-line');
+const headCircle = document.getElementById('head-circle');
+const figureSvg = document.getElementById('figure-svg');
+
+const HIP = { x: 130, y: 248 };
+let displayPitch = 0, displayRoll = 0, targetPitch = 0, targetRoll = 0;
+
+function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
+function renderFigure(pitchDev, rollDev, hexColor){
+  // Forward lean rotates the whole upper body around the hip pivot.
+  const rotation = clamp(pitchDev * 0.7, -22, 34);
+  upperBody.setAttribute('transform', `rotate(${rotation} ${HIP.x} ${HIP.y})`);
+
+  // Extra spine curvature (hunch) beyond the rigid lean, forward-only.
+  const hunch = clamp(pitchDev, -10, 40);
+  const bow = (hunch / 40) * 26;
+  const ctrlX = HIP.x + bow;
+  spinePath.setAttribute('d', `M${HIP.x},${HIP.y - 2} Q${ctrlX},${HIP.y - 50} 130,148`);
+
+  // Subtle whole-scene tilt as a hint of lateral (roll) deviation.
+  const tilt = clamp(rollDev * 0.35, -9, 9);
+  figureSvg.style.transform = `rotate(${tilt}deg)`;
+
+  spinePath.setAttribute('stroke', hexColor);
+  torsoLine.setAttribute('stroke', hexColor === '#4a5568' ? '#4a5568' : '#4a5568');
+  headCircle.setAttribute('fill', '#4a5568');
+  headCircle.style.filter = hexColor === '#4a5568' ? 'none' : `drop-shadow(0 0 6px ${hexColor}88)`;
+}
+
+let currentColor = '#4a5568';
+let targetColor = '#4a5568';
+function animateFigure(){
+  requestAnimationFrame(animateFigure);
+  displayPitch += (targetPitch - displayPitch) * 0.1;
+  displayRoll += (targetRoll - displayRoll) * 0.1;
+  renderFigure(displayPitch, displayRoll, targetColor);
+}
+animateFigure();
+
+/* ======================= READING HANDLER ======================= */
+function healthScoreFrom(pdev, rdev){
+  const penalty = Math.abs(pdev || 0) * 1.6 + Math.abs(rdev || 0) * 1.2;
+  return Math.round(clamp(100 - penalty, 0, 100));
+}
+
 function handleReading(r){
   targetPitch = r.pitch || 0;
   targetRoll = r.roll || 0;
-  updateSpineColor(r.state);
-  el.stateVal.textContent = STATE_LABELS[r.state] || r.state;
-  el.stateVal.style.color = '#' + colorFor(r.state).toString(16).padStart(6,'0');
-  el.stateSub.textContent = r.alert ? '⚠ sustained deviation — consider adjusting' : 'within normal tracking';
-  const pct = Math.min(100, (r.sustained_seconds || 0) / 15 * 100);
-  el.sustainBar.style.width = pct + '%';
-  el.sustainBar.style.background = r.alert ? 'var(--alert)' : 'var(--warn)';
+  targetColor = colorFor(r.state);
+
+  const label = STATE_LABELS[r.state] || r.state;
+  const isKnown = r.state !== 'unknown' && r.state !== 'uncalibrated';
+  const isGood = r.state === 'good';
+
+  el.health.textContent = isKnown ? healthScoreFrom(r.pitch_dev, r.roll_dev) : '—';
+  el.health.className = 'stat-value ' + (isKnown ? (isGood ? 'status-good' : 'status-bad') : 'status-neutral');
+
+  el.angle.textContent = isKnown ? `${(r.pitch_dev ?? 0).toFixed(0)}°` : '—';
+  el.angle.className = 'stat-value ' + (isKnown ? (isGood ? 'status-good' : 'status-bad') : 'status-neutral');
+
+  el.status.textContent = isKnown ? (isGood ? 'GOOD' : 'BAD') : '—';
+  el.status.className = 'stat-value ' + (isKnown ? (isGood ? 'status-good' : 'status-bad') : 'status-neutral');
+  el.statusSub.textContent = isKnown ? label : 'awaiting calibration';
+
+  el.vizSub.textContent = r.alert ? 'sustained deviation — consider adjusting' : 'sensor monitoring active';
+  el.vizGlow.style.background = `radial-gradient(circle at 50% 55%, ${targetColor}22, transparent 70%)`;
+
   el.pitch.textContent = (r.pitch ?? 0).toFixed(1) + '°';
   el.roll.textContent = (r.roll ?? 0).toFixed(1) + '°';
   el.pdev.textContent = (r.pitch_dev ?? 0).toFixed(1) + '°';
@@ -502,6 +518,7 @@ function handleReading(r){
   el.sustain.textContent = Math.round(r.sustained_seconds || 0) + 's';
 }
 
+/* ======================= SOCKET / POLLING ======================= */
 let usingSocket = false;
 try{
   const socket = io(BACKEND_URL, { transports: ['websocket','polling'], reconnectionAttempts: 5 });
@@ -520,6 +537,7 @@ async function pollLatest(){
 setInterval(pollLatest, POLL_MS);
 pollLatest();
 
+/* ======================= DEVICE ACTIONS ======================= */
 document.getElementById('btn-calibrate').addEventListener('click', async ()=>{
   try{
     const res = await fetch(`${BACKEND_URL}/api/calibrate`, { method:'POST' });
@@ -537,6 +555,7 @@ document.getElementById('btn-buzzer').addEventListener('click', async ()=>{
   }catch(e){ showToast('Could not queue command'); }
 });
 
+/* ======================= SETTINGS ======================= */
 const sliders = {
   fh: document.getElementById('slider-fh'), kyp: document.getElementById('slider-kyp'),
   lat: document.getElementById('slider-lat'), sus: document.getElementById('slider-sus'),
@@ -577,78 +596,44 @@ document.getElementById('btn-apply').addEventListener('click', async ()=>{
   }catch(e){ /* backend not reachable yet, keep defaults */ }
 })();
 
-/* ======================= CAMERA + MEDIAPIPE POSE ======================= */
-const camEl = {
-  video: document.getElementById('video'), overlay: document.getElementById('overlay'),
-  camStatus: document.getElementById('cam-status'), startCamBtn: document.getElementById('start-cam-btn'),
-  hint: document.getElementById('posture-hint'),
-};
-let camActive = false;
-const ctx = camEl.overlay.getContext('2d');
-
-async function startCamera(){
+/* ======================= ANALYTICS CHART ======================= */
+const chartSvg = document.getElementById('chart-svg');
+async function fetchHistory(){
   try{
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    camEl.video.srcObject = stream;
-    await camEl.video.play();
-    camActive = true;
-    camEl.camStatus.textContent = 'LIVE';
-    camEl.camStatus.classList.add('live');
-    camEl.startCamBtn.textContent = 'Stop Camera';
-    resizeOverlay();
-    runPose();
+    const res = await fetch(`${BACKEND_URL}/api/history?limit=50`);
+    if(!res.ok) throw new Error('no history');
+    const data = await res.json();
+    drawChart(data);
   }catch(e){
-    showToast('Camera permission denied or unavailable');
+    chartSvg.innerHTML = `<text x="300" y="110" fill="#7c8a9c" font-size="12" text-anchor="middle" font-family="IBM Plex Mono, monospace">No history available yet</text>`;
   }
 }
-function stopCamera(){
-  const stream = camEl.video.srcObject;
-  if(stream) stream.getTracks().forEach(t=>t.stop());
-  camActive = false;
-  camEl.camStatus.textContent = 'CAMERA OFF';
-  camEl.camStatus.classList.remove('live');
-  camEl.startCamBtn.textContent = 'Start Camera';
-  ctx.clearRect(0,0,camEl.overlay.width, camEl.overlay.height);
-}
-camEl.startCamBtn.addEventListener('click', ()=> camActive ? stopCamera() : startCamera());
-
-function resizeOverlay(){
-  camEl.overlay.width = camEl.video.clientWidth;
-  camEl.overlay.height = camEl.video.clientHeight;
-}
-window.addEventListener('resize', resizeOverlay);
-
-let pose;
-function initPose(){
-  pose = new Pose({ locateFile: (f)=>`https://cdn.jsdelivr.net/npm/@mediapipe/pose/${f}` });
-  pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
-  pose.onResults(onPoseResults);
-}
-function onPoseResults(results){
-  ctx.save();
-  ctx.clearRect(0,0,camEl.overlay.width, camEl.overlay.height);
-  if(results.poseLandmarks){
-    drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#4ce0d2', lineWidth: 2 });
-    drawLandmarks(ctx, results.poseLandmarks, { color: '#ffb020', radius: 2 });
-    const lm = results.poseLandmarks;
-    const ear = lm[7], shoulder = lm[11];
-    if(ear && shoulder){
-      const forwardOffset = Math.abs(ear.x - shoulder.x);
-      camEl.hint.textContent = forwardOffset > 0.09
-        ? 'Camera cue: head appears forward of shoulders.'
-        : 'Camera cue: head roughly aligned over shoulders.';
-    }
+function drawChart(readings){
+  const W = 600, H = 220, PAD = 20;
+  if(!readings || readings.length === 0){
+    chartSvg.innerHTML = `<text x="${W/2}" y="${H/2}" fill="#7c8a9c" font-size="12" text-anchor="middle" font-family="IBM Plex Mono, monospace">No readings yet</text>`;
+    return;
   }
-  ctx.restore();
-}
-async function runPose(){
-  if(!pose) initPose();
-  const loop = async ()=>{
-    if(!camActive) return;
-    await pose.send({ image: camEl.video });
-    requestAnimationFrame(loop);
-  };
-  loop();
+  const vals = readings.map(r => r.pitch_dev || 0);
+  const maxAbs = Math.max(20, ...vals.map(v => Math.abs(v)));
+  const midY = H / 2;
+  const scaleY = (H/2 - PAD) / maxAbs;
+  const stepX = (W - PAD*2) / Math.max(1, readings.length - 1);
+
+  let path = '';
+  let dots = '';
+  readings.forEach((r, i)=>{
+    const x = PAD + i * stepX;
+    const y = midY - (r.pitch_dev || 0) * scaleY;
+    path += (i === 0 ? `M${x},${y}` : ` L${x},${y}`);
+    dots += `<circle cx="${x}" cy="${y}" r="2.6" fill="${colorFor(r.state)}" />`;
+  });
+
+  chartSvg.innerHTML = `
+    <line x1="${PAD}" y1="${midY}" x2="${W-PAD}" y2="${midY}" stroke="#212c3d" stroke-width="1" stroke-dasharray="4,4"/>
+    <path d="${path}" fill="none" stroke="#5b6b80" stroke-width="1.5"/>
+    ${dots}
+  `;
 }
 </script>
 </body>
