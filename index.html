@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <meta name="theme-color" content="#060A12" />
-<title>Posture.OS — Real-Time Posture Detection</title>
+<title>POSE.alert — Real-Time Posture Detection</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -133,7 +133,7 @@
 
 <!-- ============ LOADING SCREEN ============ -->
 <div id="loading-screen">
-  <div class="load-brand"><span class="dot"></span>POSTURE.OS</div>
+  <div class="load-brand"><span class="dot"></span>POSE.ALERT</div>
   <div class="load-sub mono">REAL-TIME POSTURE DETECTION &amp; CORRECTION</div>
   <div class="load-bar-wrap"><div class="load-bar" id="load-bar"></div></div>
   <div class="load-log mono" id="load-log">Booting system…</div>
@@ -145,7 +145,7 @@
   <div id="canvas-wrap"></div>
 
   <div class="topbar">
-    <div class="brand"><span class="dot"></span>POSTURE.OS</div>
+    <div class="brand"><span class="dot"></span>POSE.ALERT</div>
     <div class="conn-status mono" id="conn-status"><span class="dot"></span>CONNECTING</div>
   </div>
 
@@ -253,14 +253,18 @@ function runBootStep(){
 }
 runBootStep();
 
-/* ======================= THREE.JS SCENE ======================= */
+/* ======================= THREE.JS SCENE — SEATED FIGURE ======================= */
+/* A figure sitting in an office chair, spine + pelvis visible "x-ray" style through a
+   translucent torso, bending live from the backend's pitch/roll — same idea as the
+   "Anatomy of Sitting" reference: neutral pelvis + upright spine = good; flattened
+   lumbar curve / forward head under sustained slouch = warn/alert coloring. */
 const wrap = document.getElementById('canvas-wrap');
 const scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x060a12, 0.045);
+scene.fog = new THREE.FogExp2(0x060a12, 0.05);
 
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 100);
-camera.position.set(6, 3, 9);
-camera.lookAt(0, 2, 0);
+const camera = new THREE.PerspectiveCamera(42, window.innerWidth/window.innerHeight, 0.1, 100);
+camera.position.set(3.6, 2.15, 4.7);
+camera.lookAt(0, 1.25, 0.1);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.domElement.classList.add('three-canvas');
@@ -272,22 +276,14 @@ const grid = new THREE.GridHelper(40, 40, 0x1b2536, 0x11182a);
 grid.position.y = -0.01;
 scene.add(grid);
 
-const ambient = new THREE.AmbientLight(0x8899bb, 0.6);
+const ambient = new THREE.AmbientLight(0x8899bb, 0.65);
 scene.add(ambient);
-const key = new THREE.PointLight(0x4ce0d2, 1.4, 30);
-key.position.set(4, 8, 6);
+const key = new THREE.PointLight(0x4ce0d2, 1.3, 30);
+key.position.set(3, 6, 4);
 scene.add(key);
-const rim = new THREE.PointLight(0xff5c6c, 0.5, 30);
-rim.position.set(-6, 4, -4);
+const rim = new THREE.PointLight(0xff5c6c, 0.45, 30);
+rim.position.set(-4, 3, -3);
 scene.add(rim);
-
-const SEGMENTS = 14;
-const SEGMENT_HEIGHT = 0.34;
-const spineGroup = new THREE.Group();
-scene.add(spineGroup);
-
-const vertebraGeo = new THREE.SphereGeometry(0.16, 20, 20);
-const linkGeo = new THREE.CylinderGeometry(0.045, 0.045, SEGMENT_HEIGHT, 10);
 
 const colorFor = (state) => {
   switch(state){
@@ -300,24 +296,87 @@ const colorFor = (state) => {
   }
 };
 
+const figureGroup = new THREE.Group();
+scene.add(figureGroup);
+
+/* ---- materials ---- */
+const chairMat = new THREE.MeshStandardMaterial({ color: 0x151d2e, roughness: 0.55, metalness: 0.35 });
+const skinMat  = new THREE.MeshStandardMaterial({ color: 0xd9a877, roughness: 0.6, metalness: 0.05, transparent: true, opacity: 0.9 });
+const shellMat = new THREE.MeshStandardMaterial({ color: 0xd9a877, roughness: 0.6, metalness: 0.05, transparent: true, opacity: 0.28, depthWrite: false });
+const hairMat  = new THREE.MeshStandardMaterial({ color: 0x7a5230, roughness: 0.7 });
+
+/* ---- chair: seat + reclined backrest + four legs ---- */
+const SEAT_Y = 1.0;
+const chair = new THREE.Group();
+const seat = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.12, 1.05), chairMat);
+seat.position.set(0, SEAT_Y, 0);
+chair.add(seat);
+
+const backrest = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.25, 0.12), chairMat);
+backrest.position.set(0, SEAT_Y + 0.68, -0.48);
+backrest.rotation.x = THREE.MathUtils.degToRad(-8);
+chair.add(backrest);
+
+const legGeo = new THREE.CylinderGeometry(0.04, 0.04, SEAT_Y - 0.06, 10);
+[[0.5,0.45],[-0.5,0.45],[0.5,-0.45],[-0.5,-0.45]].forEach(([x,z])=>{
+  const leg = new THREE.Mesh(legGeo, chairMat);
+  leg.position.set(x, (SEAT_Y - 0.06)/2, z);
+  chair.add(leg);
+});
+figureGroup.add(chair);
+
+/* ---- pelvis — the "neutral pelvic position" anchor, recolored with posture state ---- */
+const pelvisMat = new THREE.MeshStandardMaterial({ color: 0x4a5568, emissive: 0x0d3b38, emissiveIntensity: 0.55, roughness: 0.25, metalness: 0.4 });
+const pelvis = new THREE.Mesh(new THREE.SphereGeometry(0.22, 20, 16), pelvisMat);
+pelvis.scale.set(1.3, 0.8, 1);
+pelvis.position.set(0, SEAT_Y + 0.16, 0.05);
+figureGroup.add(pelvis);
+
+/* ---- legs (thigh + shin + foot, static — only the spine reacts to posture) ---- */
+function makeLeg(xSide){
+  const g = new THREE.Group();
+  const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.09, 0.55, 12), skinMat);
+  thigh.rotation.x = Math.PI/2;
+  thigh.position.set(xSide, SEAT_Y + 0.14, 0.32);
+  g.add(thigh);
+  const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.07, SEAT_Y - 0.05, 12), skinMat);
+  shin.position.set(xSide, (SEAT_Y - 0.05)/2, 0.58);
+  g.add(shin);
+  const foot = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, 0.28), skinMat);
+  foot.position.set(xSide, 0.04, 0.7);
+  g.add(foot);
+  return g;
+}
+figureGroup.add(makeLeg(0.18));
+figureGroup.add(makeLeg(-0.18));
+
+/* ---- spine: this is what bends live with sensor pitch/roll ---- */
+const SEGMENTS = 9;
+const SEGMENT_HEIGHT = 0.15;
+const spineGroup = new THREE.Group();
+spineGroup.position.set(0, SEAT_Y + 0.18, 0.05);
+figureGroup.add(spineGroup);
+
+const vertebraGeo = new THREE.SphereGeometry(0.075, 16, 16);
+const linkGeo = new THREE.CylinderGeometry(0.03, 0.03, SEGMENT_HEIGHT, 8);
+
 const bones = [];
 let prevPivot = new THREE.Object3D();
-prevPivot.position.set(0, 0, 0);
 spineGroup.add(prevPivot);
 
 for(let i=0;i<SEGMENTS;i++){
   const pivot = new THREE.Object3D();
-  pivot.position.set(0, SEGMENT_HEIGHT, 0);
+  pivot.position.set(0, i===0 ? 0 : SEGMENT_HEIGHT, 0);
   prevPivot.add(pivot);
 
   const link = new THREE.Mesh(linkGeo, new THREE.MeshStandardMaterial({
-    color: 0x4a5568, emissive: 0x0d3b38, emissiveIntensity: 0.4, roughness: 0.35, metalness: 0.4
+    color: 0x4a5568, emissive: 0x0d3b38, emissiveIntensity: 0.45, roughness: 0.3, metalness: 0.4
   }));
   link.position.set(0, SEGMENT_HEIGHT/2, 0);
   pivot.add(link);
 
   const vert = new THREE.Mesh(vertebraGeo, new THREE.MeshStandardMaterial({
-    color: 0x4a5568, emissive: 0x0d3b38, emissiveIntensity: 0.6, roughness: 0.2, metalness: 0.5
+    color: 0x4a5568, emissive: 0x0d3b38, emissiveIntensity: 0.65, roughness: 0.2, metalness: 0.5
   }));
   vert.position.set(0, SEGMENT_HEIGHT, 0);
   pivot.add(vert);
@@ -325,13 +384,38 @@ for(let i=0;i<SEGMENTS;i++){
   bones.push({ pivot, link, vert });
   prevPivot = pivot;
 }
+const shoulderPivot = prevPivot; // top of spine chain — head + arms hang off this
 
-const base = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.6, 0.7, 0.15, 24),
-  new THREE.MeshStandardMaterial({ color: 0x0c1220, emissive: 0x111a2c, roughness: 0.6 })
-);
-base.position.y = -0.08;
-spineGroup.add(base);
+/* ---- head, following the top of the spine so "forward head" is visibly forward ---- */
+const headGroup = new THREE.Group();
+headGroup.position.set(0, SEGMENT_HEIGHT + 0.1, 0);
+shoulderPivot.add(headGroup);
+const head = new THREE.Mesh(new THREE.SphereGeometry(0.14, 20, 20), skinMat);
+headGroup.add(head);
+const hair = new THREE.Mesh(new THREE.SphereGeometry(0.145, 20, 20, 0, Math.PI*2, 0, Math.PI*0.55), hairMat);
+hair.position.y = 0.02;
+headGroup.add(hair);
+
+/* ---- translucent torso shell — the "x-ray" skin so the colored spine reads clearly ---- */
+const torsoShell = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.3, SEGMENTS*SEGMENT_HEIGHT*0.92, 16), shellMat);
+torsoShell.position.set(0, SEGMENTS*SEGMENT_HEIGHT*0.46, 0);
+spineGroup.add(torsoShell);
+
+/* ---- arms, hanging from the shoulders and resting toward the thighs ---- */
+function makeArm(xSide){
+  const g = new THREE.Group();
+  const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.055, 0.42, 10), skinMat);
+  upper.position.set(xSide, -0.21, 0);
+  upper.rotation.z = THREE.MathUtils.degToRad(xSide > 0 ? -8 : 8);
+  g.add(upper);
+  const lower = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.045, 0.4, 10), skinMat);
+  lower.position.set(xSide*1.15, -0.55, 0.22);
+  lower.rotation.x = THREE.MathUtils.degToRad(65);
+  g.add(lower);
+  return g;
+}
+shoulderPivot.add(makeArm(0.26));
+shoulderPivot.add(makeArm(-0.26));
 
 function updateSpineColor(state){
   const c = colorFor(state);
@@ -339,6 +423,7 @@ function updateSpineColor(state){
     b.link.material.color.setHex(c); b.link.material.emissive.setHex(c);
     b.vert.material.color.setHex(c); b.vert.material.emissive.setHex(c);
   });
+  pelvisMat.color.setHex(c); pelvisMat.emissive.setHex(c);
 }
 
 let displayPitch = 0, displayRoll = 0, targetPitch = 0, targetRoll = 0;
@@ -347,9 +432,12 @@ function applyBend(pitchDeg, rollDeg){
   const rollRad = THREE.MathUtils.degToRad(rollDeg);
   bones.forEach((b, i)=>{
     const weight = (i+1) / SEGMENTS;
-    b.pivot.rotation.x = pitchRad * weight * 0.9;
-    b.pivot.rotation.z = rollRad * weight * 0.9;
+    b.pivot.rotation.x = pitchRad * weight * 0.85;
+    b.pivot.rotation.z = rollRad * weight * 0.6;
   });
+  // torso shell leans as a whole with the average curve, so the "skin" tracks the skeleton inside it
+  torsoShell.rotation.x = pitchRad * 0.5;
+  torsoShell.rotation.z = rollRad * 0.35;
 }
 
 window.addEventListener('resize', ()=>{
@@ -363,7 +451,7 @@ function animate(){
   displayPitch += (targetPitch - displayPitch) * 0.08;
   displayRoll += (targetRoll - displayRoll) * 0.08;
   applyBend(displayPitch, displayRoll);
-  spineGroup.rotation.y += 0.0015;
+  figureGroup.rotation.y = 0.4 + Math.sin(Date.now()*0.00015)*0.05;
   renderer.render(scene, camera);
 }
 animate();
